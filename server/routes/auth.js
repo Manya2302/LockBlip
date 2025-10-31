@@ -278,6 +278,7 @@ router.post('/register',
           username: user.username,
           publicKey: user.publicKey,
           privateKey: user.privateKey,
+          themePreference: user.themePreference || 'dark',
         },
       });
     } catch (error) {
@@ -439,6 +440,7 @@ router.post('/login',
           username: user.username,
           publicKey: user.publicKey,
           privateKey: user.privateKey,
+          themePreference: user.themePreference || 'dark',
         },
       });
     } catch (error) {
@@ -863,6 +865,7 @@ router.post('/google', async (req, res) => {
         profileImage: newUser.profileImage,
         privateKey: newUser.privateKey,
         publicKey: newUser.publicKey,
+        themePreference: newUser.themePreference || 'dark',
       },
     });
   } catch (error) {

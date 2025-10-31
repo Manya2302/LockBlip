@@ -235,4 +235,32 @@ router.get('/:username', authenticateToken, async (req, res) => {
   }
 });
 
+router.put('/theme', authenticateToken, async (req, res) => {
+  try {
+    const { theme } = req.body;
+    
+    if (!theme || !['light', 'dark'].includes(theme)) {
+      return res.status(400).json({ error: 'Invalid theme. Must be "light" or "dark"' });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    user.themePreference = theme;
+    await user.save();
+
+    console.log(`✅ Updated theme preference for ${user.username} to ${theme}`);
+
+    res.json({ 
+      success: true, 
+      theme: user.themePreference 
+    });
+  } catch (error) {
+    console.error('Update theme error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 export default router;
