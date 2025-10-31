@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import ContactItem from "./ContactItem";
 import UserProfilePreview from "./UserProfilePreview";
 import FriendRequests from "./FriendRequests";
+import ThemeToggle from "./ThemeToggle";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import lockblipLogo from "@assets/Untitled design_1761899121550.png";
@@ -98,6 +99,7 @@ export default function AppSidebar({
               <h1 className="text-xl font-bold">LockBlip</h1>
             </div>
             <div className="flex gap-1">
+              <ThemeToggle />
               <Button
                 size="icon"
                 variant="ghost"

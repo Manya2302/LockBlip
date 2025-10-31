@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Shield, Lock, Users, MessageSquare, Smartphone, Globe } from "lucide-react";
 import { useLocation } from "wouter";
+import ThemeToggle from "@/components/ThemeToggle";
 import lockblipLogo from "@assets/Untitled design_1761899121550.png";
 import heroImage from '@assets/stock_images/happy_friends_messag_b27a8923.jpg';
 import secureImage from '@assets/stock_images/person_using_smartph_2cd70d09.jpg';
@@ -20,7 +21,8 @@ export default function LandingPage() {
               <img src={lockblipLogo} alt="LockBlip" className="h-10 w-10 object-contain rounded-lg shadow-md" />
               <span className="text-2xl font-bold">LockBlip</span>
             </div>
-            <div className="flex gap-3">
+            <div className="flex items-center gap-3">
+              <ThemeToggle />
               <Button 
                 variant="ghost" 
                 onClick={() => setLocation('/auth')}

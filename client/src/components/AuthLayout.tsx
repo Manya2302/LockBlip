@@ -1,4 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import ThemeToggle from "@/components/ThemeToggle";
 import heroImage from '@assets/generated_images/Blockchain_network_hero_image_243b3dd4.png';
 import lockblipLogo from "@assets/Untitled design_1761899121550.png";
 
@@ -23,6 +24,10 @@ export default function AuthLayout({
           backgroundPosition: 'center',
         }}
       />
+      
+      <div className="absolute top-4 right-4 z-20">
+        <ThemeToggle />
+      </div>
       
       <Card className="w-full max-w-md relative z-10 border-primary/20 bg-card/80 backdrop-blur-xl">
         <CardHeader className="text-center space-y-2">
