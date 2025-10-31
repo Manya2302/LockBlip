@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import Home from "@/pages/home";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
+import LandingPage from "@/pages/LandingPage";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -69,7 +70,7 @@ function Router() {
 
   const handleAuthenticated = () => {
     setIsAuthenticated(true);
-    setLocation("/");
+    setLocation("/home");
   };
 
   const handleLogout = async () => {
@@ -93,7 +94,7 @@ function Router() {
     localStorage.removeItem('user');
     localStorage.removeItem('privateKey');
     setIsAuthenticated(false);
-    setLocation("/login");
+    setLocation("/");
   };
 
   if (isLoading) {
@@ -114,15 +115,31 @@ function Router() {
     <Switch>
       <Route path="/">
         {isAuthenticated ? (
+          <Redirect to="/home" />
+        ) : (
+          <LandingPage />
+        )}
+      </Route>
+
+      <Route path="/home">
+        {isAuthenticated ? (
           <Home key={userId} onLogout={handleLogout} />
         ) : (
-          <Redirect to="/login" />
+          <Redirect to="/" />
+        )}
+      </Route>
+
+      <Route path="/auth">
+        {isAuthenticated ? (
+          <Redirect to="/home" />
+        ) : (
+          <Login onAuthenticated={handleAuthenticated} />
         )}
       </Route>
       
       <Route path="/login">
         {isAuthenticated ? (
-          <Redirect to="/" />
+          <Redirect to="/home" />
         ) : (
           <Login onAuthenticated={handleAuthenticated} />
         )}
@@ -130,7 +147,7 @@ function Router() {
       
       <Route path="/register">
         {isAuthenticated ? (
-          <Redirect to="/" />
+          <Redirect to="/home" />
         ) : (
           <Register onAuthenticated={handleAuthenticated} />
         )}
