@@ -60,6 +60,8 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
       
       console.log('✅ Stored user data in localStorage');
       
+      window.dispatchEvent(new Event('user-logged-in'));
+      
       onSuccess(data.token, data.user);
     } catch (err: any) {
       const errorMessage = err.message || "";
@@ -159,6 +161,7 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
         localStorage.setItem('user', JSON.stringify(data.user));
         localStorage.setItem('token', data.token);
         localStorage.setItem('privateKey', data.user.privateKey);
+        window.dispatchEvent(new Event('user-logged-in'));
         onSuccess(data.token, data.user);
       } else {
         setError(data.error || 'Failed to authenticate with Google');

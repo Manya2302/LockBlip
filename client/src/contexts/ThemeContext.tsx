@@ -15,7 +15,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>('dark');
   const [isInitialized, setIsInitialized] = useState(false);
 
-  useEffect(() => {
+  const loadThemeFromLocalStorage = () => {
     const storedUser = localStorage.getItem('user');
     if (storedUser) {
       try {
@@ -23,12 +23,55 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
         const userTheme = user.themePreference || 'dark';
         setThemeState(userTheme);
         document.documentElement.classList.toggle('dark', userTheme === 'dark');
+        console.log(`🎨 Loaded theme preference: ${userTheme} for user ${user.username}`);
       } catch (error) {
         console.error('Error parsing user data:', error);
       }
     }
+  };
+
+  useEffect(() => {
+    loadThemeFromLocalStorage();
     setIsInitialized(true);
   }, []);
+
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'user' || e.key === null) {
+        console.log('🔄 User data changed in localStorage, reloading theme...');
+        loadThemeFromLocalStorage();
+      }
+    };
+
+    const handleUserChange = () => {
+      loadThemeFromLocalStorage();
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('user-logged-in', handleUserChange);
+
+    const interval = setInterval(() => {
+      const storedUser = localStorage.getItem('user');
+      if (storedUser) {
+        try {
+          const user = JSON.parse(storedUser);
+          const userTheme = user.themePreference || 'dark';
+          if (userTheme !== theme) {
+            console.log('🔄 Theme preference mismatch detected, syncing...');
+            loadThemeFromLocalStorage();
+          }
+        } catch (error) {
+          // Ignore parsing errors
+        }
+      }
+    }, 500);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('user-logged-in', handleUserChange);
+      clearInterval(interval);
+    };
+  }, [theme]);
 
   useEffect(() => {
     if (!isInitialized) return;

@@ -118,6 +118,7 @@ export default function RegistrationForm({ onSuccess }: RegistrationFormProps) {
       localStorage.setItem('token', data.token);
       localStorage.setItem('privateKey', privateKey);
       localStorage.setItem('user', JSON.stringify({ ...data.user, privateKey }));
+      window.dispatchEvent(new Event('user-logged-in'));
       onSuccess(data.token, { ...data.user, privateKey });
     } catch (err: any) {
       setSuccess("");
@@ -188,6 +189,7 @@ export default function RegistrationForm({ onSuccess }: RegistrationFormProps) {
         localStorage.setItem('user', JSON.stringify(data.user));
         localStorage.setItem('token', data.token);
         localStorage.setItem('privateKey', data.user.privateKey);
+        window.dispatchEvent(new Event('user-logged-in'));
         onSuccess(data.token, data.user);
       } else {
         setError(data.error || 'Failed to authenticate with Google');
