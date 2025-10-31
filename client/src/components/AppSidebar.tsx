@@ -8,7 +8,7 @@ import UserProfilePreview from "./UserProfilePreview";
 import FriendRequests from "./FriendRequests";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import lockblipLogo from "@assets/lockblip-logo.png";
+import lockblipLogo from "@assets/Untitled design_1761899121550.png";
 
 interface Contact {
   id: string;
@@ -94,7 +94,7 @@ export default function AppSidebar({
         <div className="flex-shrink-0 p-4 border-b border-sidebar-border">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <img src={lockblipLogo} alt="LockBlip" className="h-8 w-8 object-contain" />
+              <img src={lockblipLogo} alt="LockBlip" className="h-8 w-8 object-contain rounded-lg shadow-md" />
               <h1 className="text-xl font-bold">LockBlip</h1>
             </div>
             <div className="flex gap-1">
