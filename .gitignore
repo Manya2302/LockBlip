@@ -1,0 +1,41 @@
+node_modules
+dist
+.DS_Store
+server/public
+vite.config.ts.*
+*.tar.gz
+.env.local
+.env.*.local
+
+
+# MongoDB
+/tmp/mongodb_data
+/tmp/mongodb.log*
+data/
+data/db/
+
+# TypeScript
+*.tsbuildinfo
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Backup files
+*.bak
+*.unused
+
+# Uploads
+uploads/
