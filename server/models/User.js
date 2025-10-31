@@ -65,6 +65,11 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  themePreference: {
+    type: String,
+    enum: ['light', 'dark'],
+    default: 'dark',
+  },
   createdAt: {
     type: Date,
     default: Date.now,
