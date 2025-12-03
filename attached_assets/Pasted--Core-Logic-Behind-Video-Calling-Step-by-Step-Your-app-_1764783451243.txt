@@ -1,0 +1,223 @@
+✅ Core Logic Behind Video Calling (Step-by-Step)
+
+Your app needs 4 main components:
+
+1. Signaling System (To connect two users)
+
+Video call cannot start directly.
+First your app must exchange connection details between Caller and Receiver.
+
+You need to send:
+
+Offer (SDP)
+
+Answer (SDP)
+
+ICE Candidates
+
+This is done using:
+
+WebSocket
+
+Firebase
+
+Socket.IO
+
+Your server’s REST API + polling (not recommended)
+
+✔ Why signaling?
+
+Because two devices cannot directly know:
+
+What codec to use (H.264, VP8, VP9)
+
+What resolution
+
+What STUN/TURN server
+
+Their public IP and port
+
+So signaling = the “handshake” before actual video starts.
+
+2. WebRTC for P2P Video Transfer
+
+After exchanging SDP + ICE, both users establish a peer-to-peer connection.
+
+✔ WebRTC handles:
+
+Video streaming
+
+Audio streaming
+
+NAT traversal
+
+Encryption (DTLS + SRTP)
+
+✔ Is it encrypted?
+
+YES, WebRTC is end-to-end encrypted by default.
+No extra encryption needed unless you want additional layers.
+
+3. STUN + TURN Servers
+
+WebRTC needs public IP discovery and fallback relay:
+
+✔ STUN server
+
+Discovers public IP
+
+Allows P2P when NAT allows
+
+Free to use (Google STUN)
+
+✔ TURN server
+
+Used when P2P fails
+
+Acts as a relay
+
+Must be self-hosted (cost ↑)
+
+Apps like WhatsApp, Signal, Telegram use TURN extensively.
+
+4. Media Streams (Camera + Mic)
+
+Once the P2P connection is established, WebRTC sends media streams.
+
+Steps:
+
+Get camera & mic stream
+
+Attach stream to WebRTC connection
+
+WebRTC compresses video using codecs
+
+WebRTC encrypts packets
+
+Sends them directly to user’s device
+
+⭐ Full Flow of a Video Call
+STEP 1 – Caller starts call
+
+Caller A opens camera
+
+Creates WebRTC offer (SDP)
+
+Sends it to User B via signaling server
+
+STEP 2 – Receiver accepts
+
+User B receives "Incoming Call" via signaling
+
+B creates Answer (SDP)
+
+Sends it back through signaling
+
+STEP 3 – Exchange ICE candidates
+
+Both devices exchange:
+
+IP addresses
+
+Ports
+
+Protocols
+
+To check how to connect P2P.
+
+STEP 4 – STUN/TURN connectivity check
+
+If direct connection possible → P2P
+
+If not → fallback to TURN relay
+
+STEP 5 – Secure Video Stream Begins
+
+DTLS handshake
+
+SRTP encrypted video
+
+Frame compression
+
+Live video delivered
+
+🔐 How End-to-End Encryption Works
+
+Signal uses: Double Ratchet + WebRTC E2EE
+WhatsApp uses: Signal Protocol + WebRTC E2EE
+
+You can:
+
+Option A: Use WebRTC only (already encrypted)
+
+Simple, recommended.
+
+Option B: Add additional encryption on video frames
+
+More complex (requires encoding/decoding manually).
+
+🧱 Tech Stack You Need
+
+Here are the pieces you must implement:
+
+✔ Frontend:
+
+WebRTC API (Android/iOS/React Native/Flutter)
+
+Camera access
+
+Microphone access
+
+UI for:
+
+Answer
+
+Reject
+
+Mute
+
+Switch camera
+
+✔ Backend:
+
+Signaling Server
+
+WebSocket
+
+Socket.IO
+
+Node.js/Python/Go
+
+TURN/STUN Server
+
+coturn recommended
+
+You must host your own TURN for reliability
+
+🛠 Simple Example Logic (High Level Code)
+Caller:
+const pc = new RTCPeerConnection(config);
+pc.addStream(localStream);
+
+const offer = await pc.createOffer();
+await pc.setLocalDescription(offer);
+
+// send offer to server
+sendToUserB("offer", offer);
+
+Receiver:
+pc.setRemoteDescription(offer);
+const answer = await pc.createAnswer();
+pc.setLocalDescription(answer);
+
+// send answer back
+sendToUserA("answer", answer);
+
+
+ICE handling:
+
+pc.onicecandidate = (event) => {
+    if (event.candidate) {
+        sendToOtherUser("ice-candidate", event.candidate);
+    }
+};
