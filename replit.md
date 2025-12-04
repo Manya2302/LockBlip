@@ -36,9 +36,10 @@ Lockblip is a secure, end-to-end encrypted chat application with blockchain-back
   - 45-second timeout for unanswered calls
   - Automatic missed call recording for offline/rejected/timeout calls
   - Red badges on voice/video call icons in ChatWindow
-  - Missed Call History page (`/missed-calls`)
+  - Missed Call History page (`/missed-calls`) replaces View Blockchain Ledger
   - Real-time sync across devices via Socket.io
-  - Badge reset when opening specific chat (per-sender isolation)
+  - Badge reset only when clicking specific call type icon (not on chat open)
+  - Single system message per missed call ("Missed voice/video call")
 - Migrated project to Replit environment
 - Configured environment variables in Replit secrets
 - Moved `cross-env` to dependencies for production compatibility
