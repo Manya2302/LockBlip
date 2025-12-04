@@ -23,7 +23,9 @@ import storiesRoutes from './routes/stories.js';
 import connectionsRoutes from './routes/connections.js';
 import chatsRoutes from './routes/chats.js';
 import uploadsRoutes from './routes/uploads.js';
+import missedCallsRoutes from './routes/missedCalls.js';
 import { initializeBlockchain, addMessageBlock } from './lib/blockchain.js';
+import MissedCall from './models/MissedCall.js';
 import { authenticateSocket } from './middleware/auth.js';
 import { setupVite, serveStatic } from './vite.js';
 import { encryptField, decryptField } from './lib/encryption.js';
@@ -88,6 +90,7 @@ app.use('/api/stories', storiesRoutes);
 app.use('/api/connections', connectionsRoutes);
 app.use('/api/chats', chatsRoutes);
 app.use('/api/uploads', uploadsRoutes);
+app.use('/api/missed-calls', missedCallsRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -113,10 +116,70 @@ function getPendingCallKey(from: string, to: string): string {
   return `${from}:${to}`;
 }
 
-io.on('connection', (socket: AuthenticatedSocket) => {
+async function getMissedCallCounts(username: string) {
+  const unseenCalls = await MissedCall.find({ 
+    receiverId: username, 
+    isSeen: false 
+  }).lean();
+  
+  const perUser: { [key: string]: { voice: number; video: number } } = {};
+  let totalMissed = 0;
+  
+  for (const call of unseenCalls) {
+    const callerId = call.callerId;
+    if (!perUser[callerId]) {
+      perUser[callerId] = { voice: 0, video: 0 };
+    }
+    if (call.callType === 'voice') {
+      perUser[callerId].voice++;
+    } else {
+      perUser[callerId].video++;
+    }
+    totalMissed++;
+  }
+  
+  return { totalMissed, perUser };
+}
+
+async function createMissedCall(callerId: string, receiverId: string, callType: 'voice' | 'video') {
+  try {
+    await MissedCall.create({
+      callerId,
+      receiverId,
+      callType,
+      isSeen: false,
+      timestamp: new Date(),
+    });
+    
+    console.log(`📞 Missed call recorded: ${callerId} -> ${receiverId} (${callType})`);
+    
+    const receiverSocketId = userSockets.get(receiverId);
+    if (receiverSocketId) {
+      const counts = await getMissedCallCounts(receiverId);
+      io.to(receiverSocketId).emit('missed_call_update', counts);
+      io.to(receiverSocketId).emit('new_missed_call', { callerId, callType });
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Error creating missed call:', error);
+    return false;
+  }
+}
+
+io.on('connection', async (socket: AuthenticatedSocket) => {
   console.log(`User connected: ${socket.username}`);
   if (socket.username) {
     userSockets.set(socket.username, socket.id);
+    
+    // Send missed call counts on connection
+    try {
+      const missedCallCounts = await getMissedCallCounts(socket.username);
+      socket.emit('missed_call_update', missedCallCounts);
+      console.log(`📞 Sent missed call counts to ${socket.username}:`, missedCallCounts);
+    } catch (err) {
+      console.error('Error sending missed call counts on connection:', err);
+    }
     
     for (const [key, pendingCall] of pendingCalls.entries()) {
       if (pendingCall.to === socket.username) {
@@ -362,7 +425,7 @@ io.on('connection', (socket: AuthenticatedSocket) => {
     }
   });
 
-  socket.on('webrtc-call-offer', (data) => {
+  socket.on('webrtc-call-offer', async (data) => {
     try {
       const { to, offer, callType, from } = data;
       console.log(`📞 Call offer from ${from} to ${to} (${callType})`);
@@ -371,7 +434,7 @@ io.on('connection', (socket: AuthenticatedSocket) => {
         io.to(recipientSocketId).emit('webrtc-call-offer', { from, offer, callType });
         socket.emit('webrtc-recipient-online', { to });
       } else {
-        console.log(`📞 Recipient ${to} is offline, storing pending call`);
+        console.log(`📞 Recipient ${to} is offline, storing pending call and creating missed call`);
         const callKey = getPendingCallKey(from, to);
         pendingCalls.set(callKey, {
           from,
@@ -383,6 +446,10 @@ io.on('connection', (socket: AuthenticatedSocket) => {
           canceled: false,
         });
         socket.emit('webrtc-recipient-offline', { to });
+        
+        // Create missed call record when recipient is offline
+        const missedCallType = callType === 'audio' ? 'voice' : 'video';
+        await createMissedCall(from, to, missedCallType);
       }
     } catch (err) {
       console.error('Error in webrtc-call-offer:', err);
@@ -470,6 +537,64 @@ io.on('connection', (socket: AuthenticatedSocket) => {
       }
     } catch (err) {
       console.error('Error in webrtc-call-end:', err);
+    }
+  });
+
+  // Record missed call when call times out (unanswered)
+  socket.on('record_missed_call', async (data) => {
+    try {
+      const { to, callType } = data;
+      const from = socket.username;
+      if (!from || !to || !callType) {
+        console.log('📞 Invalid missed call data');
+        return;
+      }
+      
+      console.log(`📞 Recording missed call (timeout): ${from} -> ${to} (${callType})`);
+      const missedCallType = callType === 'audio' ? 'voice' : 'video';
+      await createMissedCall(from, to, missedCallType);
+    } catch (err) {
+      console.error('Error recording missed call:', err);
+    }
+  });
+
+  // Reset missed calls when user opens a chat
+  socket.on('reset_missed_calls', async (data) => {
+    try {
+      const { callerId } = data;
+      const receiverId = socket.username;
+      
+      if (!receiverId || !callerId) {
+        console.log('📞 Invalid reset_missed_calls data');
+        return;
+      }
+      
+      console.log(`📞 Resetting missed calls for ${receiverId} from ${callerId}`);
+      
+      const result = await MissedCall.updateMany(
+        { receiverId, callerId, isSeen: false },
+        { isSeen: true }
+      );
+      
+      console.log(`📞 Marked ${result.modifiedCount} missed calls as seen`);
+      
+      // Send updated counts
+      const counts = await getMissedCallCounts(receiverId);
+      socket.emit('missed_call_update', counts);
+    } catch (err) {
+      console.error('Error resetting missed calls:', err);
+    }
+  });
+
+  // Get missed call counts on demand
+  socket.on('get_missed_call_counts', async () => {
+    try {
+      if (!socket.username) return;
+      
+      const counts = await getMissedCallCounts(socket.username);
+      socket.emit('missed_call_update', counts);
+    } catch (err) {
+      console.error('Error getting missed call counts:', err);
     }
   });
 });

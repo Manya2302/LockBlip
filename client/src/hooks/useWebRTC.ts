@@ -27,6 +27,8 @@ const defaultConfig: WebRTCConfig = {
   ],
 };
 
+const CALL_TIMEOUT_MS = 45000; // 45 seconds timeout for unanswered calls
+
 export function useWebRTC(
   currentUsername: string,
   onCallEnded?: () => void
@@ -36,6 +38,7 @@ export function useWebRTC(
   const remoteStreamRef = useRef<MediaStream | null>(null);
   const pendingCandidatesRef = useRef<RTCIceCandidate[]>([]);
   const socketRef = useRef<Socket | null>(null);
+  const callTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const [callState, setCallState] = useState<CallState>({
     isInCall: false,
@@ -54,6 +57,13 @@ export function useWebRTC(
 
   const setSocket = useCallback((socket: Socket | null) => {
     socketRef.current = socket;
+  }, []);
+
+  const clearCallTimeout = useCallback(() => {
+    if (callTimeoutRef.current) {
+      clearTimeout(callTimeoutRef.current);
+      callTimeoutRef.current = null;
+    }
   }, []);
 
   const createPeerConnection = useCallback((remoteUser: string) => {
@@ -114,6 +124,10 @@ export function useWebRTC(
 
     try {
       console.log('Starting call to:', to, 'type:', callType);
+      
+      // Clear any existing timeout
+      clearCallTimeout();
+      
       setCallState({
         isInCall: true,
         isRinging: false,
@@ -143,11 +157,54 @@ export function useWebRTC(
         callType,
         from: currentUsername,
       });
+      
+      // Start timeout for unanswered calls
+      callTimeoutRef.current = setTimeout(() => {
+        console.log('📞 Call timeout - recording missed call for:', to);
+        // Record as missed call since it wasn't answered
+        if (socketRef.current && callType) {
+          socketRef.current.emit('record_missed_call', {
+            to,
+            callType,
+          });
+        }
+        // Cancel the call
+        if (socketRef.current && to) {
+          socketRef.current.emit('webrtc-call-cancel', {
+            to,
+            from: currentUsername,
+          });
+        }
+        // Cleanup
+        if (peerConnectionRef.current) {
+          peerConnectionRef.current.close();
+          peerConnectionRef.current = null;
+        }
+        if (localStreamRef.current) {
+          localStreamRef.current.getTracks().forEach((track) => track.stop());
+          localStreamRef.current = null;
+        }
+        setLocalStream(null);
+        setRemoteStream(null);
+        setCallState({
+          isInCall: false,
+          isRinging: false,
+          isIncoming: false,
+          callType: null,
+          remoteUser: null,
+          isMuted: false,
+          isVideoOff: false,
+          callStatus: 'idle',
+          isRecipientOnline: false,
+        });
+        pendingCandidatesRef.current = [];
+        onCallEnded?.();
+      }, CALL_TIMEOUT_MS);
     } catch (error) {
       console.error('Error starting call:', error);
       endCall();
     }
-  }, [currentUsername, getMediaStream, createPeerConnection]);
+  }, [currentUsername, getMediaStream, createPeerConnection, clearCallTimeout, onCallEnded]);
 
   const handleIncomingOffer = useCallback((from: string, callType: 'video' | 'audio') => {
     console.log('Handling incoming offer from:', from, 'type:', callType);
@@ -228,6 +285,10 @@ export function useWebRTC(
 
   const handleCallAnswer = useCallback(async (answer: RTCSessionDescriptionInit) => {
     console.log('Handling call answer');
+    
+    // Clear timeout since call was answered
+    clearCallTimeout();
+    
     if (peerConnectionRef.current) {
       try {
         await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(answer));
@@ -245,7 +306,7 @@ export function useWebRTC(
         console.error('Error setting remote description:', error);
       }
     }
-  }, []);
+  }, [clearCallTimeout]);
 
   const handleIceCandidate = useCallback(async (candidate: RTCIceCandidateInit) => {
     console.log('Handling ICE candidate');
@@ -286,6 +347,10 @@ export function useWebRTC(
 
   const cleanupCall = useCallback(() => {
     console.log('Cleaning up call resources');
+    
+    // Clear call timeout
+    clearCallTimeout();
+    
     if (peerConnectionRef.current) {
       peerConnectionRef.current.close();
       peerConnectionRef.current = null;
@@ -316,7 +381,7 @@ export function useWebRTC(
     pendingCandidatesRef.current = [];
 
     onCallEnded?.();
-  }, [onCallEnded]);
+  }, [onCallEnded, clearCallTimeout]);
 
   const handleRecipientOnline = useCallback(() => {
     console.log('Recipient came online - transitioning to ringing state');
@@ -336,20 +401,36 @@ export function useWebRTC(
     }));
   }, []);
 
-  const cancelCall = useCallback(() => {
+  const recordMissedCall = useCallback((to: string, callType: 'video' | 'audio') => {
+    if (socketRef.current) {
+      console.log('📞 Recording missed call:', to, callType);
+      socketRef.current.emit('record_missed_call', {
+        to,
+        callType,
+      });
+    }
+  }, []);
+
+  const cancelCall = useCallback((recordAsMissed = false) => {
     console.log('Canceling call (user initiated)');
     
     const remoteUser = callState.remoteUser;
+    const callType = callState.callType;
     
     if (remoteUser && socketRef.current) {
       socketRef.current.emit('webrtc-call-cancel', {
         to: remoteUser,
         from: currentUsername,
       });
+      
+      // Record as missed call if the recipient didn't answer (was ringing or offline)
+      if (recordAsMissed && callType && (callState.callStatus === 'ringing' || !callState.isRecipientOnline)) {
+        recordMissedCall(remoteUser, callType);
+      }
     }
 
     cleanupCall();
-  }, [currentUsername, callState.remoteUser, cleanupCall]);
+  }, [currentUsername, callState.remoteUser, callState.callType, callState.callStatus, callState.isRecipientOnline, cleanupCall, recordMissedCall]);
 
   const endCall = useCallback(() => {
     console.log('Ending call (user initiated)');
@@ -449,5 +530,6 @@ export function useWebRTC(
     handleCallReject,
     handleRecipientOnline,
     handleRecipientOffline,
+    recordMissedCall,
   };
 }

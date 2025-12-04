@@ -21,6 +21,11 @@ interface Message {
   metadata?: any;
 }
 
+interface MissedCallCounts {
+  voice: number;
+  video: number;
+}
+
 interface ChatWindowProps {
   contactName?: string;
   messages: Message[];
@@ -42,6 +47,7 @@ interface ChatWindowProps {
   onDeleteForBoth?: (messageId: string) => void;
   onStartVideoCall?: () => void;
   onStartAudioCall?: () => void;
+  missedCallCounts?: MissedCallCounts;
 }
 
 export default function ChatWindow({
@@ -65,6 +71,7 @@ export default function ChatWindow({
   onDeleteForBoth,
   onStartVideoCall,
   onStartAudioCall,
+  missedCallCounts = { voice: 0, video: 0 },
 }: ChatWindowProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -230,24 +237,38 @@ export default function ChatWindow({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            size="icon"
-            variant="ghost"
-            onClick={onStartAudioCall}
-            className="text-primary hover:text-primary hover:bg-primary/10"
-            title="Voice call"
-          >
-            <Phone className="h-5 w-5" />
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            onClick={onStartVideoCall}
-            className="text-primary hover:text-primary hover:bg-primary/10"
-            title="Video call"
-          >
-            <Video className="h-5 w-5" />
-          </Button>
+          <div className="relative">
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={onStartAudioCall}
+              className="text-primary hover:text-primary hover:bg-primary/10"
+              title="Voice call"
+            >
+              <Phone className="h-5 w-5" />
+            </Button>
+            {missedCallCounts.voice > 0 && (
+              <span className="absolute -top-1 -right-1 h-5 min-w-5 px-1 flex items-center justify-center rounded-full bg-destructive text-destructive-foreground text-xs font-bold">
+                {missedCallCounts.voice}
+              </span>
+            )}
+          </div>
+          <div className="relative">
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={onStartVideoCall}
+              className="text-primary hover:text-primary hover:bg-primary/10"
+              title="Video call"
+            >
+              <Video className="h-5 w-5" />
+            </Button>
+            {missedCallCounts.video > 0 && (
+              <span className="absolute -top-1 -right-1 h-5 min-w-5 px-1 flex items-center justify-center rounded-full bg-destructive text-destructive-foreground text-xs font-bold">
+                {missedCallCounts.video}
+              </span>
+            )}
+          </div>
           <BlockchainStatus blockCount={blockCount} isValid={true} />
         </div>
       </div>

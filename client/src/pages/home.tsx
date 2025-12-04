@@ -9,6 +9,7 @@ import Stories from "@/components/Stories";
 import ProfileManagement from "@/pages/profile";
 import VideoCall from "@/components/VideoCall";
 import { useWebRTC } from "@/hooks/useWebRTC";
+import { useMissedCalls } from "@/hooks/useMissedCalls";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { User } from "lucide-react";
 import naclUtil from "tweetnacl-util";
@@ -190,6 +191,13 @@ export default function Home({ onLogout }: HomeProps) {
     handleRecipientOnline,
     handleRecipientOffline,
   } = useWebRTC(user.username || '');
+
+  const {
+    counts: missedCallCounts,
+    totalMissed: globalMissedCallCount,
+    getCountsForUser: getMissedCallCountsForContact,
+    markCallsAsSeen: resetMissedCalls,
+  } = useMissedCalls(token, socketRef);
 
   const [pendingOffer, setPendingOffer] = useState<{
     from: string;
@@ -504,6 +512,9 @@ export default function Home({ onLogout }: HomeProps) {
             messageCount: decryptedMessages.length
           });
         }
+        
+        // Reset missed calls for this contact when opening their chat
+        resetMissedCalls(activeContact.name);
       } catch (error) {
         console.error('Error loading messages:', error);
       } finally {
@@ -985,6 +996,7 @@ export default function Home({ onLogout }: HomeProps) {
               isLoadingMessages={isLoadingMessages}
               onStartVideoCall={handleStartVideoCall}
               onStartAudioCall={handleStartAudioCall}
+              missedCallCounts={activeContact ? getMissedCallCountsForContact(activeContact.name) : { voice: 0, video: 0 }}
             />
           ) : (
             <LedgerViewer blocks={blockchain} isValid={true} />
