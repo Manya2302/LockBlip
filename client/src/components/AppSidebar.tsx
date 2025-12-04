@@ -1,4 +1,4 @@
-import { Search, Plus, BookOpen, LogOut, User, X, Bell } from "lucide-react";
+import { Search, Plus, PhoneMissed, LogOut, User, X, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -38,7 +38,8 @@ interface AppSidebarProps {
   contacts: Contact[];
   activeContactId?: string;
   onSelectContact: (id: string) => void;
-  onViewLedger: () => void;
+  onViewMissedCalls: () => void;
+  missedCallCount?: number;
   onLogout: () => void;
 }
 
@@ -46,7 +47,8 @@ export default function AppSidebar({
   contacts,
   activeContactId,
   onSelectContact,
-  onViewLedger,
+  onViewMissedCalls,
+  missedCallCount = 0,
   onLogout,
 }: AppSidebarProps) {
   const [searchQuery, setSearchQuery] = useState("");
@@ -210,12 +212,20 @@ export default function AppSidebar({
           </Button>
           <Button
             variant="outline"
-            className="w-full justify-start gap-2"
-            onClick={onViewLedger}
-            data-testid="button-view-ledger"
+            className="w-full justify-start gap-2 relative"
+            onClick={onViewMissedCalls}
+            data-testid="button-view-missed-calls"
           >
-            <BookOpen className="h-4 w-4" />
-            View Blockchain Ledger
+            <PhoneMissed className="h-4 w-4 text-destructive" />
+            Missed Call History
+            {missedCallCount > 0 && (
+              <Badge 
+                className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs font-semibold bg-destructive text-white rounded-full"
+                data-testid="badge-missed-call-count"
+              >
+                {missedCallCount > 99 ? '99+' : missedCallCount}
+              </Badge>
+            )}
           </Button>
         </div>
       </div>

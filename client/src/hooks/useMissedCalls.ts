@@ -106,6 +106,50 @@ export function useMissedCalls(token: string | null, socketRef?: React.MutableRe
     }
   }, [token, activeSocket]);
 
+  const markCallsAsSeenByType = useCallback(async (callerId: string, callType: 'voice' | 'video') => {
+    if (!token) return;
+    
+    try {
+      const response = await fetch('/api/missed-calls/mark-seen-by-type', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ callerId, callType }),
+      });
+      
+      if (response.ok) {
+        setCounts(prev => {
+          const newPerUser = { ...prev.perUser };
+          const callerCounts = newPerUser[callerId];
+          if (callerCounts) {
+            const typeCount = callType === 'voice' ? callerCounts.voice : callerCounts.video;
+            if (callType === 'voice') {
+              callerCounts.voice = 0;
+            } else {
+              callerCounts.video = 0;
+            }
+            if (callerCounts.voice === 0 && callerCounts.video === 0) {
+              delete newPerUser[callerId];
+            }
+            return {
+              totalMissed: Math.max(0, prev.totalMissed - typeCount),
+              perUser: newPerUser,
+            };
+          }
+          return prev;
+        });
+        
+        if (activeSocket) {
+          activeSocket.emit('reset_missed_calls_by_type', { callerId, callType });
+        }
+      }
+    } catch (error) {
+      console.error('Error marking missed calls by type as seen:', error);
+    }
+  }, [token, activeSocket]);
+
   const markAllAsSeen = useCallback(async () => {
     if (!token) return;
     
@@ -178,6 +222,7 @@ export function useMissedCalls(token: string | null, socketRef?: React.MutableRe
     fetchMissedCalls,
     fetchMissedCallCounts,
     markCallsAsSeen,
+    markCallsAsSeenByType,
     markAllAsSeen,
     getCountsForUser,
     totalMissed: counts.totalMissed,

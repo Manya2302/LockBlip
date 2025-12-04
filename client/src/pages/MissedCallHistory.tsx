@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
-import { Phone, Video, ArrowLeft, PhoneMissed, Clock } from "lucide-react";
+import { useEffect, useState, useMemo } from "react";
+import { Phone, Video, ArrowLeft, PhoneMissed, Clock, Calendar, User, PhoneCall } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { format, formatDistanceToNow, isToday, isYesterday } from "date-fns";
+import { format, isToday, isYesterday, isThisWeek, isThisYear, parseISO } from "date-fns";
 
 interface MissedCall {
   _id: string;
@@ -12,6 +12,10 @@ interface MissedCall {
   callType: 'voice' | 'video';
   isSeen: boolean;
   timestamp: string;
+}
+
+interface GroupedCalls {
+  [date: string]: MissedCall[];
 }
 
 interface MissedCallHistoryProps {
@@ -50,15 +54,48 @@ export default function MissedCallHistory({ token, onBack, onOpenChat }: MissedC
     fetchMissedCalls();
   }, [token]);
 
+  const groupedCalls = useMemo(() => {
+    const groups: GroupedCalls = {};
+    
+    missedCalls.forEach(call => {
+      const date = new Date(call.timestamp);
+      let dateKey: string;
+      
+      if (isToday(date)) {
+        dateKey = 'Today';
+      } else if (isYesterday(date)) {
+        dateKey = 'Yesterday';
+      } else if (isThisWeek(date)) {
+        dateKey = format(date, 'EEEE');
+      } else if (isThisYear(date)) {
+        dateKey = format(date, 'MMMM d');
+      } else {
+        dateKey = format(date, 'MMMM d, yyyy');
+      }
+      
+      if (!groups[dateKey]) {
+        groups[dateKey] = [];
+      }
+      groups[dateKey].push(call);
+    });
+    
+    return groups;
+  }, [missedCalls]);
+
   const formatTimestamp = (timestamp: string) => {
+    const date = new Date(timestamp);
+    return format(date, 'h:mm a');
+  };
+
+  const formatFullTimestamp = (timestamp: string) => {
     const date = new Date(timestamp);
     
     if (isToday(date)) {
-      return format(date, 'h:mm a');
+      return `Today at ${format(date, 'h:mm a')}`;
     } else if (isYesterday(date)) {
-      return `Yesterday, ${format(date, 'h:mm a')}`;
+      return `Yesterday at ${format(date, 'h:mm a')}`;
     } else {
-      return format(date, 'MMM d, h:mm a');
+      return format(date, 'MMM d, yyyy \'at\' h:mm a');
     }
   };
 
@@ -95,32 +132,61 @@ export default function MissedCallHistory({ token, onBack, onOpenChat }: MissedC
   };
 
   const unseenCount = missedCalls.filter(c => !c.isSeen).length;
+  const totalVoiceCalls = missedCalls.filter(c => c.callType === 'voice').length;
+  const totalVideoCalls = missedCalls.filter(c => c.callType === 'video').length;
 
   return (
     <div className="h-full flex flex-col bg-background">
-      <div className="flex-shrink-0 h-16 border-b border-border flex items-center justify-between px-4 bg-card/30 backdrop-blur-xl">
-        <div className="flex items-center gap-3">
-          <Button
-            size="icon"
-            variant="ghost"
-            onClick={onBack}
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div className="flex items-center gap-2">
-            <PhoneMissed className="h-5 w-5 text-destructive" />
-            <h2 className="font-semibold text-lg">Missed Calls</h2>
+      <div className="flex-shrink-0 border-b border-border bg-card/30 backdrop-blur-xl">
+        <div className="h-16 flex items-center justify-between px-4">
+          <div className="flex items-center gap-3">
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={onBack}
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <div className="flex items-center gap-2">
+              <PhoneMissed className="h-5 w-5 text-destructive" />
+              <h2 className="font-semibold text-lg">Missed Call History</h2>
+            </div>
           </div>
+          {unseenCount > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={markAllAsSeen}
+              className="text-primary text-sm"
+            >
+              Mark all as seen
+            </Button>
+          )}
         </div>
-        {unseenCount > 0 && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={markAllAsSeen}
-            className="text-primary text-sm"
-          >
-            Mark all as seen
-          </Button>
+        
+        {missedCalls.length > 0 && (
+          <div className="px-4 pb-3 flex items-center gap-4 text-sm">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <PhoneCall className="h-4 w-4" />
+              <span>Total: {missedCalls.length} missed calls</span>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-1.5 text-muted-foreground">
+                <Phone className="h-3.5 w-3.5" />
+                <span>{totalVoiceCalls} voice</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-muted-foreground">
+                <Video className="h-3.5 w-3.5" />
+                <span>{totalVideoCalls} video</span>
+              </div>
+            </div>
+            {unseenCount > 0 && (
+              <div className="ml-auto flex items-center gap-1.5 text-destructive font-medium">
+                <span className="h-2 w-2 rounded-full bg-destructive"></span>
+                <span>{unseenCount} unseen</span>
+              </div>
+            )}
+          </div>
         )}
       </div>
 
@@ -136,54 +202,74 @@ export default function MissedCallHistory({ token, onBack, onOpenChat }: MissedC
             <p className="text-sm">Your missed call history will appear here</p>
           </div>
         ) : (
-          <div className="divide-y divide-border">
-            {missedCalls.map((call) => (
-              <div
-                key={call._id}
-                className={`flex items-center gap-4 p-4 hover:bg-muted/50 cursor-pointer transition-colors ${
-                  !call.isSeen ? 'bg-primary/5' : ''
-                }`}
-                onClick={() => handleCallClick(call.callerId)}
-              >
-                <Avatar className="h-12 w-12">
-                  <AvatarFallback className="bg-primary/20 text-primary font-semibold">
-                    {getInitials(call.callerId)}
-                  </AvatarFallback>
-                </Avatar>
-                
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className={`font-medium truncate ${!call.isSeen ? 'text-foreground' : 'text-muted-foreground'}`}>
-                      {call.callerId}
-                    </span>
-                    {!call.isSeen && (
-                      <span className="h-2 w-2 rounded-full bg-primary flex-shrink-0"></span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-1">
-                      {call.callType === 'video' ? (
-                        <Video className="h-3.5 w-3.5 text-destructive" />
-                      ) : (
-                        <Phone className="h-3.5 w-3.5 text-destructive" />
-                      )}
-                      <span className="text-destructive">
-                        Missed {call.callType} call
-                      </span>
-                    </div>
-                  </div>
+          <div className="py-2">
+            {Object.entries(groupedCalls).map(([dateGroup, calls]) => (
+              <div key={dateGroup} className="mb-4">
+                <div className="px-4 py-2 flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  <Calendar className="h-3.5 w-3.5" />
+                  <span>{dateGroup}</span>
+                  <span className="text-xs font-normal">({calls.length} calls)</span>
                 </div>
+                <div className="divide-y divide-border/50">
+                  {calls.map((call) => (
+                    <div
+                      key={call._id}
+                      className={`flex items-center gap-4 px-4 py-3 hover:bg-muted/50 cursor-pointer transition-colors ${
+                        !call.isSeen ? 'bg-destructive/5 border-l-2 border-l-destructive' : ''
+                      }`}
+                      onClick={() => handleCallClick(call.callerId)}
+                    >
+                      <Avatar className="h-11 w-11">
+                        <AvatarFallback className={`font-semibold ${
+                          !call.isSeen ? 'bg-destructive/20 text-destructive' : 'bg-primary/20 text-primary'
+                        }`}>
+                          {getInitials(call.callerId)}
+                        </AvatarFallback>
+                      </Avatar>
+                      
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <User className="h-3.5 w-3.5 text-muted-foreground" />
+                          <span className={`font-medium truncate ${!call.isSeen ? 'text-foreground' : 'text-muted-foreground'}`}>
+                            @{call.callerId}
+                          </span>
+                          {!call.isSeen && (
+                            <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-destructive text-destructive-foreground">
+                              NEW
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5 text-sm text-muted-foreground">
+                          <div className="flex items-center gap-1">
+                            {call.callType === 'video' ? (
+                              <Video className="h-3.5 w-3.5 text-destructive" />
+                            ) : (
+                              <Phone className="h-3.5 w-3.5 text-destructive" />
+                            )}
+                            <span className="text-destructive font-medium">
+                              Missed {call.callType} call
+                            </span>
+                          </div>
+                        </div>
+                      </div>
 
-                <div className="flex flex-col items-end gap-1">
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Clock className="h-3 w-3" />
-                    <span>{formatTimestamp(call.timestamp)}</span>
-                  </div>
-                  {call.callType === 'video' ? (
-                    <Video className="h-5 w-5 text-muted-foreground" />
-                  ) : (
-                    <Phone className="h-5 w-5 text-muted-foreground" />
-                  )}
+                      <div className="flex flex-col items-end gap-1.5">
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Clock className="h-3 w-3" />
+                          <span>{formatTimestamp(call.timestamp)}</span>
+                        </div>
+                        <div className={`p-1.5 rounded-full ${
+                          call.callType === 'video' ? 'bg-blue-500/10' : 'bg-green-500/10'
+                        }`}>
+                          {call.callType === 'video' ? (
+                            <Video className="h-4 w-4 text-blue-500" />
+                          ) : (
+                            <Phone className="h-4 w-4 text-green-500" />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             ))}

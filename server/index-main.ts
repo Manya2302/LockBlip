@@ -153,11 +153,156 @@ async function createMissedCall(callerId: string, receiverId: string, callType: 
     
     console.log(`📞 Missed call recorded: ${callerId} -> ${receiverId} (${callType})`);
     
+    // Create a system message for the missed call in the chat
+    const chatRoomId = [callerId, receiverId].sort().join('_');
+    const callTypeLabel = callType === 'voice' ? 'voice' : 'video';
+    const systemMessage = `📞 Missed ${callTypeLabel} call`;
+    
+    const { encryptMessageWithChatKeys, calculateMessageHash, getPreviousMessageHash } = await import('./lib/chatCrypto.js');
+    const { encryptedMessage, chatPublicKey, chatPrivateKey } = await encryptMessageWithChatKeys(systemMessage, chatRoomId);
+    
+    const previousHash = await getPreviousMessageHash(chatRoomId);
+    const timestamp = new Date();
+    const hash = calculateMessageHash(
+      chatRoomId,
+      'LockBlip',
+      receiverId,
+      'text',
+      encryptedMessage,
+      timestamp.toISOString(),
+      previousHash
+    );
+    
+    const block = await addMessageBlock('LockBlip', receiverId, encryptedMessage);
+    
+    const chatMessage = await Chat.create({
+      senderId: 'LockBlip',
+      receiverId: receiverId,
+      encryptedMessage,
+      chatRoomId,
+      messageType: 'text',
+      mediaUrl: null,
+      metadata: { 
+        isSystemMessage: true, 
+        missedCallFrom: callerId,
+        missedCallType: callType 
+      },
+      status: 'delivered',
+      blockIndex: block.index,
+      hash,
+      previousHash,
+      chatPublicKey,
+      chatPrivateKey,
+      timestamp,
+    });
+    
+    console.log(`📞 System message created for missed call: ${chatMessage._id}`);
+    
+    // Also send the missed call message to the receiver if online
     const receiverSocketId = userSockets.get(receiverId);
     if (receiverSocketId) {
       const counts = await getMissedCallCounts(receiverId);
       io.to(receiverSocketId).emit('missed_call_update', counts);
       io.to(receiverSocketId).emit('new_missed_call', { callerId, callType });
+      
+      // Send the system message to the receiver
+      const { serverDecrypt } = await import('./lib/chatCrypto.js');
+      const chatEncrypted = serverDecrypt(encryptedMessage);
+      
+      io.to(receiverSocketId).emit('receive-message', {
+        from: 'LockBlip',
+        messageId: chatMessage._id.toString(),
+        encryptedMessage: chatEncrypted,
+        chatPublicKey,
+        chatPrivateKey,
+        hash,
+        previousHash,
+        block: {
+          index: block.index,
+          timestamp: block.timestamp,
+          hash: block.hash,
+          prevHash: block.prevHash,
+          payload: block.payload,
+        },
+        messageType: 'text',
+        mediaUrl: null,
+        metadata: { 
+          isSystemMessage: true, 
+          missedCallFrom: callerId,
+          missedCallType: callType 
+        },
+      });
+    }
+    
+    // Also notify the caller that their call was missed
+    const callerSocketId = userSockets.get(callerId);
+    if (callerSocketId) {
+      // Create a system message for the caller too
+      const callerMessage = `📞 ${receiverId} missed your ${callTypeLabel} call`;
+      const { encryptedMessage: callerEncMsg, chatPublicKey: callerPubKey, chatPrivateKey: callerPrivKey } = 
+        await encryptMessageWithChatKeys(callerMessage, chatRoomId);
+      
+      const callerPrevHash = await getPreviousMessageHash(chatRoomId);
+      const callerTimestamp = new Date();
+      const callerHash = calculateMessageHash(
+        chatRoomId,
+        'LockBlip',
+        callerId,
+        'text',
+        callerEncMsg,
+        callerTimestamp.toISOString(),
+        callerPrevHash
+      );
+      
+      const callerBlock = await addMessageBlock('LockBlip', callerId, callerEncMsg);
+      
+      const callerChatMessage = await Chat.create({
+        senderId: 'LockBlip',
+        receiverId: callerId,
+        encryptedMessage: callerEncMsg,
+        chatRoomId,
+        messageType: 'text',
+        mediaUrl: null,
+        metadata: { 
+          isSystemMessage: true, 
+          missedCallTo: receiverId,
+          missedCallType: callType 
+        },
+        status: 'delivered',
+        blockIndex: callerBlock.index,
+        hash: callerHash,
+        previousHash: callerPrevHash,
+        chatPublicKey: callerPubKey,
+        chatPrivateKey: callerPrivKey,
+        timestamp: callerTimestamp,
+      });
+      
+      const { serverDecrypt } = await import('./lib/chatCrypto.js');
+      const callerChatEncrypted = serverDecrypt(callerEncMsg);
+      
+      io.to(callerSocketId).emit('receive-message', {
+        from: 'LockBlip',
+        messageId: callerChatMessage._id.toString(),
+        encryptedMessage: callerChatEncrypted,
+        chatPublicKey: callerPubKey,
+        chatPrivateKey: callerPrivKey,
+        hash: callerHash,
+        previousHash: callerPrevHash,
+        block: {
+          index: callerBlock.index,
+          timestamp: callerBlock.timestamp,
+          hash: callerBlock.hash,
+          prevHash: callerBlock.prevHash,
+          payload: callerBlock.payload,
+        },
+        messageType: 'text',
+        mediaUrl: null,
+        metadata: { 
+          isSystemMessage: true, 
+          missedCallTo: receiverId,
+          missedCallType: callType 
+        },
+      });
     }
     
     return true;
@@ -558,7 +703,40 @@ io.on('connection', async (socket: AuthenticatedSocket) => {
     }
   });
 
-  // Reset missed calls when user opens a chat
+  // Reset missed calls by type - only when user clicks the specific call icon
+  socket.on('reset_missed_calls_by_type', async (data) => {
+    try {
+      const { callerId, callType } = data;
+      const receiverId = socket.username;
+      
+      if (!receiverId || !callerId || !callType) {
+        console.log('📞 Invalid reset_missed_calls_by_type data');
+        return;
+      }
+      
+      if (!['voice', 'video'].includes(callType)) {
+        console.log('📞 Invalid callType in reset_missed_calls_by_type');
+        return;
+      }
+      
+      console.log(`📞 Resetting ${callType} missed calls for ${receiverId} from ${callerId}`);
+      
+      const result = await MissedCall.updateMany(
+        { receiverId, callerId, callType, isSeen: false },
+        { isSeen: true }
+      );
+      
+      console.log(`📞 Marked ${result.modifiedCount} ${callType} missed calls as seen`);
+      
+      // Send updated counts to receiver
+      const counts = await getMissedCallCounts(receiverId);
+      socket.emit('missed_call_update', counts);
+    } catch (err) {
+      console.error('Error resetting missed calls by type:', err);
+    }
+  });
+
+  // Legacy reset_missed_calls - kept for backwards compatibility but now only used explicitly
   socket.on('reset_missed_calls', async (data) => {
     try {
       const { callerId } = data;
@@ -569,7 +747,7 @@ io.on('connection', async (socket: AuthenticatedSocket) => {
         return;
       }
       
-      console.log(`📞 Resetting missed calls for ${receiverId} from ${callerId}`);
+      console.log(`📞 Resetting all missed calls for ${receiverId} from ${callerId}`);
       
       const result = await MissedCall.updateMany(
         { receiverId, callerId, isSeen: false },

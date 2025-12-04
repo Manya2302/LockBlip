@@ -7,6 +7,7 @@ import ChatWindow from "@/components/ChatWindow";
 import LedgerViewer from "@/components/LedgerViewer";
 import Stories from "@/components/Stories";
 import ProfileManagement from "@/pages/profile";
+import MissedCallHistory from "@/pages/MissedCallHistory";
 import VideoCall from "@/components/VideoCall";
 import { useWebRTC } from "@/hooks/useWebRTC";
 import { useMissedCalls } from "@/hooks/useMissedCalls";
@@ -57,7 +58,7 @@ interface Block {
 }
 
 export default function Home({ onLogout }: HomeProps) {
-  const [activeView, setActiveView] = useState<"chat" | "ledger" | "profile">("chat");
+  const [activeView, setActiveView] = useState<"chat" | "ledger" | "profile" | "missedCalls">("chat");
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [activeContactId, setActiveContactId] = useState<string | undefined>();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -197,6 +198,7 @@ export default function Home({ onLogout }: HomeProps) {
     totalMissed: globalMissedCallCount,
     getCountsForUser: getMissedCallCountsForContact,
     markCallsAsSeen: resetMissedCalls,
+    markCallsAsSeenByType,
   } = useMissedCalls(token, socketRef);
 
   const [pendingOffer, setPendingOffer] = useState<{
@@ -209,15 +211,19 @@ export default function Home({ onLogout }: HomeProps) {
     if (!activeContactId) return;
     const activeContact = contacts.find((c) => c.id === activeContactId);
     if (!activeContact) return;
+    // Clear video missed calls when clicking the video call icon
+    markCallsAsSeenByType(activeContact.name, 'video');
     startCall(activeContact.name, 'video');
-  }, [activeContactId, contacts, startCall]);
+  }, [activeContactId, contacts, startCall, markCallsAsSeenByType]);
 
   const handleStartAudioCall = useCallback(() => {
     if (!activeContactId) return;
     const activeContact = contacts.find((c) => c.id === activeContactId);
     if (!activeContact) return;
+    // Clear voice missed calls when clicking the voice call icon
+    markCallsAsSeenByType(activeContact.name, 'voice');
     startCall(activeContact.name, 'audio');
-  }, [activeContactId, contacts, startCall]);
+  }, [activeContactId, contacts, startCall, markCallsAsSeenByType]);
 
   const handleAcceptCall = useCallback(() => {
     if (pendingOffer) {
@@ -513,8 +519,8 @@ export default function Home({ onLogout }: HomeProps) {
           });
         }
         
-        // Reset missed calls for this contact when opening their chat
-        resetMissedCalls(activeContact.name);
+        // NOTE: Missed calls are NO LONGER auto-cleared when opening chat
+        // They are only cleared when user clicks the specific call icon (voice or video)
       } catch (error) {
         console.error('Error loading messages:', error);
       } finally {
@@ -791,10 +797,11 @@ export default function Home({ onLogout }: HomeProps) {
               setActiveView("chat");
               setIsSidebarOpen(false);
             }}
-            onViewLedger={() => {
-              setActiveView("ledger");
+            onViewMissedCalls={() => {
+              setActiveView("missedCalls");
               setIsSidebarOpen(false);
             }}
+            missedCallCount={globalMissedCallCount}
             onLogout={onLogout}
           />
         </div>
@@ -997,6 +1004,18 @@ export default function Home({ onLogout }: HomeProps) {
               onStartVideoCall={handleStartVideoCall}
               onStartAudioCall={handleStartAudioCall}
               missedCallCounts={activeContact ? getMissedCallCountsForContact(activeContact.name) : { voice: 0, video: 0 }}
+            />
+          ) : activeView === "missedCalls" ? (
+            <MissedCallHistory 
+              token={token}
+              onBack={() => setActiveView("chat")}
+              onOpenChat={(contactName) => {
+                const contact = contacts.find(c => c.name === contactName);
+                if (contact) {
+                  setActiveContactId(contact.id);
+                  setActiveView("chat");
+                }
+              }}
             />
           ) : (
             <LedgerViewer blocks={blockchain} isValid={true} />

@@ -75,6 +75,34 @@ router.post('/mark-seen', authenticateToken, async (req, res) => {
   }
 });
 
+router.post('/mark-seen-by-type', authenticateToken, async (req, res) => {
+  try {
+    const username = req.user.username;
+    const { callerId, callType } = req.body;
+    
+    if (!callerId) {
+      return res.status(400).json({ error: 'callerId is required' });
+    }
+    
+    if (!callType || !['voice', 'video'].includes(callType)) {
+      return res.status(400).json({ error: 'callType must be voice or video' });
+    }
+    
+    const result = await MissedCall.updateMany(
+      { receiverId: username, callerId, callType, isSeen: false },
+      { isSeen: true }
+    );
+    
+    res.json({ 
+      success: true, 
+      modifiedCount: result.modifiedCount 
+    });
+  } catch (error) {
+    console.error('Error marking missed calls by type as seen:', error);
+    res.status(500).json({ error: 'Failed to mark missed calls as seen' });
+  }
+});
+
 router.post('/mark-all-seen', authenticateToken, async (req, res) => {
   try {
     const username = req.user.username;
