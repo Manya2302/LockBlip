@@ -31,6 +31,14 @@ Lockblip is a secure, end-to-end encrypted chat application with blockchain-back
 ```
 
 ## Recent Changes (Dec 4, 2025)
+- **Missed Call Tracking System** (WhatsApp-style):
+  - Per-user, per-sender, per-call-type badge counting
+  - 45-second timeout for unanswered calls
+  - Automatic missed call recording for offline/rejected/timeout calls
+  - Red badges on voice/video call icons in ChatWindow
+  - Missed Call History page (`/missed-calls`)
+  - Real-time sync across devices via Socket.io
+  - Badge reset when opening specific chat (per-sender isolation)
 - Migrated project to Replit environment
 - Configured environment variables in Replit secrets
 - Moved `cross-env` to dependencies for production compatibility
@@ -72,10 +80,11 @@ The application runs a combined frontend + backend server:
 ## Key Features
 1. **End-to-End Encryption:** Messages encrypted with TweetNaCl before storage
 2. **Blockchain Verification:** Each message is recorded in a blockchain ledger
-3. **WebRTC Video Calls:** Peer-to-peer video/audio calls
-4. **Stories:** Instagram-style stories with view tracking
-5. **IP Authorization:** Device authorization system for added security
-6. **OTP Verification:** Email-based one-time password verification
+3. **WebRTC Video Calls:** Peer-to-peer video/audio calls with missed call tracking
+4. **Missed Call Tracking:** WhatsApp-style missed call badges with per-sender isolation
+5. **Stories:** Instagram-style stories with view tracking
+6. **IP Authorization:** Device authorization system for added security
+7. **OTP Verification:** Email-based one-time password verification
 
 ## Database Schema
 The application uses MongoDB with Mongoose models:
@@ -86,6 +95,7 @@ The application uses MongoDB with Mongoose models:
 - **Story:** User stories with expiration
 - **OTP:** One-time passwords for verification
 - **IPAuthorization:** Authorized device tracking
+- **MissedCall:** Missed call tracking with caller_id, receiver_id, call_type, is_seen
 
 ## Known Issues
 - WebGL not available in Replit environment (3D landing page falls back to 2D)
