@@ -3,7 +3,7 @@
 ## Overview
 Lockblip is a secure, end-to-end encrypted chat application with blockchain-backed message verification. It features military-grade encryption, WebRTC video calls, stories, and a blockchain ledger for message integrity.
 
-**Last Updated:** December 4, 2025
+**Last Updated:** December 8, 2025
 
 ## Tech Stack
 - **Frontend:** React + Vite + TypeScript + Tailwind CSS
@@ -29,6 +29,26 @@ Lockblip is a secure, end-to-end encrypted chat application with blockchain-back
 ├── shared/              # Shared types and schemas
 └── uploads/             # User uploaded files
 ```
+
+## Recent Changes (Dec 8, 2025)
+- **Self-Destructing Communication System**:
+  - Auto-delete timers (5s, 10s, 30s, 1m, 5m, 1h, 24h, view-once)
+  - Messages auto-delete after being viewed + timer expires
+  - Background deletion worker runs every 10 seconds
+  - Visual countdown timers and burn effect animations
+  - Media (images, videos, audio) support with view/play tracking
+  - Socket-based real-time deletion notifications
+
+- **Ghost Mode Chat System**:
+  - Completely isolated encrypted chat sessions
+  - PIN-based authentication (6-digit with hash storage)
+  - Per-session AES-256 encryption keys that rotate on session start/end
+  - Gesture activation (long-press, shake detection)
+  - Dark neon UI with Matrix rain effect
+  - All messages auto-expire after 24 hours (TTL indexes)
+  - No message persistence - complete invisibility
+  - Screenshot detection with privacy blur overlay
+  - Session heartbeat for automatic termination
 
 ## Recent Changes (Dec 4, 2025)
 - **Missed Call Tracking System** (WhatsApp-style):
@@ -83,20 +103,25 @@ The application runs a combined frontend + backend server:
 2. **Blockchain Verification:** Each message is recorded in a blockchain ledger
 3. **WebRTC Video Calls:** Peer-to-peer video/audio calls with missed call tracking
 4. **Missed Call Tracking:** WhatsApp-style missed call badges with per-sender isolation
-5. **Stories:** Instagram-style stories with view tracking
-6. **IP Authorization:** Device authorization system for added security
-7. **OTP Verification:** Email-based one-time password verification
+5. **Self-Destructing Messages:** Auto-delete timers with view-once support
+6. **Ghost Mode:** Completely invisible encrypted chat sessions
+7. **Stories:** Instagram-style stories with view tracking
+8. **IP Authorization:** Device authorization system for added security
+9. **OTP Verification:** Email-based one-time password verification
 
 ## Database Schema
 The application uses MongoDB with Mongoose models:
 - **User:** Encrypted user data with public/private key pairs
-- **Chat:** Encrypted messages with blockchain references
+- **Chat:** Encrypted messages with blockchain references, self-destruct fields
 - **Connection:** Friend connections and requests
 - **Blockchain:** Message blockchain ledger
 - **Story:** User stories with expiration
 - **OTP:** One-time passwords for verification
 - **IPAuthorization:** Authorized device tracking
 - **MissedCall:** Missed call tracking with caller_id, receiver_id, call_type, is_seen
+- **GhostChatSession:** Isolated ghost chat sessions with per-session encryption keys
+- **GhostMessage:** Ghost mode messages with TTL indexes for auto-expiry
+- **GhostUser:** PIN authentication storage for ghost mode access
 
 ## Known Issues
 - WebGL not available in Replit environment (3D landing page falls back to 2D)
