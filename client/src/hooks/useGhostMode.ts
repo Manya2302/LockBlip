@@ -8,6 +8,19 @@ interface GhostSession {
   expireAt: string;
 }
 
+interface GhostSessionStatus {
+  hasSession: boolean;
+  sessionId: string | null;
+  ghostEnabled: boolean;
+  ghostTerminated: boolean;
+  hasJoined: boolean;
+  isCreator: boolean;
+  canEnterDirectly: boolean;
+  needsPin: boolean;
+  participants: string[];
+  sessionKey: string | null;
+}
+
 interface GhostMessage {
   id: string;
   senderId: string;
@@ -390,7 +403,7 @@ export function useGhostMode(options: UseGhostModeOptions) {
     }
   }, [socket]);
 
-  const terminateSession = useCallback(async (sessionId: string): Promise<boolean> => {
+  const terminateSession = useCallback(async (sessionId: string, partnerId?: string): Promise<boolean> => {
     try {
       const token = localStorage.getItem('authToken');
       const response = await fetch('/api/ghost/terminate', {
@@ -403,6 +416,15 @@ export function useGhostMode(options: UseGhostModeOptions) {
       });
       
       if (response.ok) {
+        const data = await response.json();
+        
+        if (socket && partnerId) {
+          socket.emit('ghost-mode-terminated', {
+            sessionId,
+            partnerId: partnerId || data.partnerId,
+          });
+        }
+        
         setCurrentSession(null);
         setMessages([]);
         setIsGhostModeActive(false);
@@ -413,7 +435,68 @@ export function useGhostMode(options: UseGhostModeOptions) {
       console.error('Ghost terminate error:', error);
       return false;
     }
+  }, [socket]);
+
+  const checkSessionStatus = useCallback(async (partnerId: string): Promise<GhostSessionStatus | null> => {
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch(`/api/ghost/session-status/${partnerId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      
+      if (response.ok) {
+        return await response.json();
+      }
+      return null;
+    } catch (error) {
+      console.error('Ghost session status error:', error);
+      return null;
+    }
   }, []);
+
+  const directEnter = useCallback(async (partnerId: string, deviceType: string = 'desktop'): Promise<GhostSession | null> => {
+    try {
+      setIsLoading(true);
+      const token = localStorage.getItem('authToken');
+      const response = await fetch('/api/ghost/direct-enter', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ partnerId, deviceType }),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        
+        const session: GhostSession = {
+          sessionId: data.sessionId,
+          participants: data.participants,
+          sessionKey: data.sessionKey,
+          expireAt: data.expireAt,
+        };
+        
+        setCurrentSession(session);
+        setIsGhostModeActive(true);
+        
+        if (socket) {
+          socket.emit('ghost-mode-entered', {
+            sessionId: data.sessionId,
+            partnerId,
+          });
+        }
+        
+        return session;
+      }
+      return null;
+    } catch (error) {
+      console.error('Ghost direct enter error:', error);
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [socket]);
 
   useEffect(() => {
     if (!socket || !isGhostModeActive) return;
@@ -449,14 +532,24 @@ export function useGhostMode(options: UseGhostModeOptions) {
       ));
     };
 
+    const handleSessionTerminated = (data: { sessionId: string; terminatedBy: string }) => {
+      console.log(`👻 Ghost session terminated by ${data.terminatedBy}`);
+      setCurrentSession(null);
+      setMessages([]);
+      setIsGhostModeActive(false);
+      options.onSessionExpired?.();
+    };
+
     socket.on('ghost-receive-message', handleNewMessage);
     socket.on('ghost-message-deleted', handleMessageDeleted);
     socket.on('ghost-message-view-started', handleViewStarted);
+    socket.on('ghost-session-terminated', handleSessionTerminated);
 
     return () => {
       socket.off('ghost-receive-message', handleNewMessage);
       socket.off('ghost-message-deleted', handleMessageDeleted);
       socket.off('ghost-message-view-started', handleViewStarted);
+      socket.off('ghost-session-terminated', handleSessionTerminated);
     };
   }, [socket, isGhostModeActive, options]);
 
@@ -524,6 +617,9 @@ export function useGhostMode(options: UseGhostModeOptions) {
     reauthenticate,
     logSecurityEvent,
     terminateSession,
+    checkSessionStatus,
+    directEnter,
+    setIsGhostModeActive,
   };
 }
 

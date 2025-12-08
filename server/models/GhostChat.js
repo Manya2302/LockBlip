@@ -44,6 +44,25 @@ const ghostChatSessionSchema = new mongoose.Schema({
     type: Boolean,
     default: true,
   },
+  ghostEnabled: {
+    type: Boolean,
+    default: true,
+  },
+  ghostTerminated: {
+    type: Boolean,
+    default: false,
+  },
+  terminatedAt: {
+    type: Date,
+    default: null,
+  },
+  terminatedBy: {
+    type: String,
+    default: null,
+  },
+  joinedUsers: [{
+    type: String,
+  }],
   lastActivity: {
     type: Date,
     default: Date.now,

@@ -1139,6 +1139,50 @@ io.on('connection', async (socket: AuthenticatedSocket) => {
       console.error('Ghost partner joined error:', error);
     }
   });
+
+  // Ghost mode termination notification
+  socket.on('ghost-mode-terminated', async (data) => {
+    try {
+      const { sessionId, partnerId } = data;
+      
+      if (!socket.username) return;
+      
+      const partnerSocketId = userSockets.get(partnerId);
+      if (partnerSocketId) {
+        io.to(partnerSocketId).emit('ghost-session-terminated', {
+          sessionId,
+          terminatedBy: socket.username,
+          timestamp: new Date(),
+        });
+      }
+      
+      console.log(`👻 Ghost session terminated by ${socket.username}, notifying ${partnerId}`);
+    } catch (error) {
+      console.error('Ghost termination notification error:', error);
+    }
+  });
+
+  // Ghost mode direct enter notification
+  socket.on('ghost-mode-entered', async (data) => {
+    try {
+      const { sessionId, partnerId } = data;
+      
+      if (!socket.username) return;
+      
+      const partnerSocketId = userSockets.get(partnerId);
+      if (partnerSocketId) {
+        io.to(partnerSocketId).emit('ghost-partner-entered', {
+          sessionId,
+          partner: socket.username,
+          timestamp: new Date(),
+        });
+      }
+      
+      console.log(`👻 ${socket.username} entered Ghost Mode with ${partnerId}`);
+    } catch (error) {
+      console.error('Ghost enter notification error:', error);
+    }
+  });
 });
 
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {

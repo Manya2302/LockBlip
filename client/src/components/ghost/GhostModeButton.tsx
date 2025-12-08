@@ -18,12 +18,28 @@ import {
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 
+interface GhostSessionStatus {
+  hasSession: boolean;
+  sessionId: string | null;
+  ghostEnabled: boolean;
+  ghostTerminated: boolean;
+  hasJoined: boolean;
+  isCreator: boolean;
+  canEnterDirectly: boolean;
+  needsPin: boolean;
+  participants: string[];
+  sessionKey: string | null;
+}
+
 interface GhostModeButtonProps {
   partnerId: string;
   partnerName?: string;
   onActivate: (partnerId: string, deviceType: string, disclaimerAgreed: boolean) => Promise<{ pin: string; sessionId: string } | null>;
   onJoin: (pin: string, deviceType: string) => Promise<boolean>;
+  onDirectEnter: (partnerId: string, deviceType: string) => Promise<any>;
+  onCheckStatus: (partnerId: string) => Promise<GhostSessionStatus | null>;
   onSendMessage?: (message: string) => void;
+  onEnterGhostMode?: () => void;
   className?: string;
 }
 
@@ -32,11 +48,14 @@ export function GhostModeButton({
   partnerName,
   onActivate,
   onJoin,
+  onDirectEnter,
+  onCheckStatus,
   onSendMessage,
+  onEnterGhostMode,
   className = '',
 }: GhostModeButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [mode, setMode] = useState<'choose' | 'disclaimer' | 'success' | 'join'>('choose');
+  const [mode, setMode] = useState<'loading' | 'choose' | 'disclaimer' | 'success' | 'join'>('loading');
   const [pin, setPin] = useState('');
   const [generatedPin, setGeneratedPin] = useState('');
   const [loading, setLoading] = useState(false);
@@ -44,6 +63,7 @@ export function GhostModeButton({
   const [showPin, setShowPin] = useState(false);
   const [disclaimerAgreed, setDisclaimerAgreed] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [sessionStatus, setSessionStatus] = useState<GhostSessionStatus | null>(null);
 
   const detectDeviceType = (): 'mobile' | 'desktop' | 'tablet' => {
     const userAgent = navigator.userAgent.toLowerCase();
@@ -77,6 +97,8 @@ export function GhostModeButton({
           const username = localStorage.getItem('username') || 'User';
           onSendMessage(`Ghost Mode activated by ${username}, Ghost PIN: ${result.pin}`);
         }
+        
+        onEnterGhostMode?.();
       } else {
         setError('Failed to activate Ghost Mode');
       }
@@ -103,6 +125,7 @@ export function GhostModeButton({
       if (success) {
         setIsOpen(false);
         resetState();
+        onEnterGhostMode?.();
       } else {
         setError('Invalid PIN or expired invitation');
       }
@@ -114,19 +137,63 @@ export function GhostModeButton({
   };
 
   const resetState = () => {
-    setMode('choose');
+    setMode('loading');
     setPin('');
     setGeneratedPin('');
     setError('');
     setShowPin(false);
     setDisclaimerAgreed(false);
     setCopied(false);
+    setSessionStatus(null);
   };
 
-  const handleOpenChange = (open: boolean) => {
+  const checkStatus = async () => {
+    setMode('loading');
+    try {
+      const status = await onCheckStatus(partnerId);
+      setSessionStatus(status);
+      
+      if (status?.canEnterDirectly) {
+        setMode('choose');
+      } else if (status?.needsPin) {
+        setMode('choose');
+      } else {
+        setMode('choose');
+      }
+    } catch (err) {
+      console.error('Failed to check ghost status:', err);
+      setMode('choose');
+    }
+  };
+
+  const handleOpenChange = async (open: boolean) => {
     setIsOpen(open);
-    if (!open) {
+    if (open) {
+      await checkStatus();
+    } else {
       resetState();
+    }
+  };
+
+  const handleDirectEnter = async () => {
+    setLoading(true);
+    setError('');
+    
+    try {
+      const deviceType = detectDeviceType();
+      const result = await onDirectEnter(partnerId, deviceType);
+      
+      if (result) {
+        setIsOpen(false);
+        resetState();
+        onEnterGhostMode?.();
+      } else {
+        setError('Failed to enter Ghost Mode');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to enter Ghost Mode');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -179,23 +246,64 @@ export function GhostModeButton({
             </div>
           )}
 
+          {mode === 'loading' && (
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500"></div>
+            </div>
+          )}
+
           {mode === 'choose' && (
             <div className="space-y-3">
-              <Button
-                onClick={() => setMode('disclaimer')}
-                className="w-full bg-purple-600 hover:bg-purple-700 text-white"
-              >
-                <Lock className="h-4 w-4 mr-2" />
-                Start Ghost Session with {partnerName || partnerId}
-              </Button>
-              <Button
-                onClick={() => setMode('join')}
-                variant="outline"
-                className="w-full border-purple-500/50 text-purple-400 hover:bg-purple-500/20"
-              >
-                <Unlock className="h-4 w-4 mr-2" />
-                Join with PIN
-              </Button>
+              {sessionStatus?.canEnterDirectly ? (
+                <Button
+                  onClick={handleDirectEnter}
+                  className="w-full bg-green-600 hover:bg-green-700 text-white"
+                  disabled={loading}
+                >
+                  <Ghost className="h-4 w-4 mr-2" />
+                  {loading ? 'Entering...' : 'Enter Ghost Mode'}
+                </Button>
+              ) : sessionStatus?.needsPin ? (
+                <Button
+                  onClick={() => setMode('join')}
+                  className="w-full bg-purple-600 hover:bg-purple-700 text-white"
+                >
+                  <Unlock className="h-4 w-4 mr-2" />
+                  Join Ghost Mode using PIN
+                </Button>
+              ) : (
+                <Button
+                  onClick={() => setMode('disclaimer')}
+                  className="w-full bg-purple-600 hover:bg-purple-700 text-white"
+                >
+                  <Lock className="h-4 w-4 mr-2" />
+                  Start Ghost Session with {partnerName || partnerId}
+                </Button>
+              )}
+              
+              {!sessionStatus?.canEnterDirectly && !sessionStatus?.needsPin && (
+                <Button
+                  onClick={() => setMode('join')}
+                  variant="outline"
+                  className="w-full border-purple-500/50 text-purple-400 hover:bg-purple-500/20"
+                >
+                  <Unlock className="h-4 w-4 mr-2" />
+                  Join with PIN
+                </Button>
+              )}
+              
+              {sessionStatus?.canEnterDirectly && (
+                <p className="text-xs text-green-400 text-center mt-2">
+                  You have an active Ghost Mode session. Click above to enter directly.
+                </p>
+              )}
+              
+              {sessionStatus?.needsPin && (
+                <p className="text-xs text-purple-400 text-center mt-2">
+                  Your partner activated Ghost Mode. Enter the PIN they shared to join.
+                </p>
+              )}
+              
               <p className="text-xs text-gray-500 text-center mt-4">
                 Ghost Mode messages are end-to-end encrypted, auto-expire in 24 hours,
                 and are hidden from your main chat history.

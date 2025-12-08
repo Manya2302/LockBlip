@@ -477,25 +477,36 @@ router.post('/activate', authenticateToken, async (req, res) => {
     
     let existingSession = await GhostChatSession.findOne({
       participants: { $all: participants },
-      isActive: true,
-    });
+    }).sort({ createdAt: -1 });
     
     let finalSessionId = sessionId;
     let finalSessionKey = sessionKey;
     
-    if (existingSession) {
+    if (existingSession && existingSession.isActive && !existingSession.ghostTerminated) {
       finalSessionId = existingSession.sessionId;
       finalSessionKey = existingSession.sessionKey;
       
       await GhostChatSession.findByIdAndUpdate(existingSession._id, {
         lastActivity: new Date(),
+        joinedUsers: existingSession.joinedUsers?.includes(username) 
+          ? existingSession.joinedUsers 
+          : [...(existingSession.joinedUsers || []), username],
       });
     } else {
+      if (existingSession && existingSession.ghostTerminated) {
+        await GhostChatSession.findByIdAndUpdate(existingSession._id, {
+          isActive: false,
+        });
+      }
+      
       await GhostChatSession.create({
         sessionId,
         participants,
         sessionKey,
         createdBy: username,
+        ghostEnabled: true,
+        ghostTerminated: false,
+        joinedUsers: [username],
         expireAt,
       });
     }
@@ -591,6 +602,13 @@ router.post('/join', authenticateToken, async (req, res) => {
       deviceType,
       lastActivity: new Date(),
     });
+    
+    if (!session.joinedUsers?.includes(username)) {
+      await GhostChatSession.findByIdAndUpdate(session._id, {
+        $addToSet: { joinedUsers: username },
+        lastActivity: new Date(),
+      });
+    }
     
     await logGhostAccess(matchedAccess.sessionId, username, 'access_granted', deviceType, { partnerId: matchedAccess.partnerId }, req);
     await logGhostAccess(matchedAccess.sessionId, username, 'session_joined', deviceType, {}, req);
@@ -749,16 +767,132 @@ router.post('/terminate', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Session not found' });
     }
     
-    await GhostChatSession.findByIdAndUpdate(session._id, { isActive: false });
-    await GhostChatAccess.updateMany({ sessionId }, { isActive: false });
+    await GhostChatSession.findByIdAndUpdate(session._id, {
+      isActive: false,
+      ghostEnabled: false,
+      ghostTerminated: true,
+      terminatedAt: new Date(),
+      terminatedBy: username,
+      sessionKey: null,
+    });
+    await GhostChatAccess.updateMany({ sessionId }, { isActive: false, accessGranted: false });
     await GhostMessage.deleteMany({ sessionId });
     
     await logGhostAccess(sessionId, username, 'session_terminated', deviceType, {}, req);
     
-    res.json({ success: true, message: 'Session terminated and all messages deleted' });
+    res.json({ 
+      success: true, 
+      message: 'Session terminated and all messages deleted',
+      partnerId: session.participants.find(p => p !== username),
+    });
   } catch (error) {
     console.error('Ghost terminate error:', error);
     res.status(500).json({ error: 'Failed to terminate session' });
+  }
+});
+
+router.get('/session-status/:partnerId', authenticateToken, async (req, res) => {
+  try {
+    const { partnerId } = req.params;
+    const username = req.user.username;
+    
+    const participants = [username, partnerId].sort();
+    
+    const session = await GhostChatSession.findOne({
+      participants: { $all: participants },
+    }).sort({ createdAt: -1 });
+    
+    if (!session) {
+      return res.json({
+        hasSession: false,
+        ghostEnabled: false,
+        ghostTerminated: false,
+        hasJoined: false,
+        canEnterDirectly: false,
+        needsPin: false,
+        sessionId: null,
+      });
+    }
+    
+    const hasJoined = session.joinedUsers?.includes(username) || false;
+    const isCreator = session.createdBy === username;
+    const ghostEnabled = session.ghostEnabled && session.isActive && !session.ghostTerminated;
+    const canEnterDirectly = ghostEnabled && (hasJoined || isCreator);
+    const needsPin = ghostEnabled && !hasJoined && !isCreator;
+    
+    res.json({
+      hasSession: true,
+      sessionId: session.sessionId,
+      ghostEnabled,
+      ghostTerminated: session.ghostTerminated || false,
+      hasJoined,
+      isCreator,
+      canEnterDirectly,
+      needsPin,
+      participants: session.participants,
+      sessionKey: canEnterDirectly ? session.sessionKey : null,
+    });
+  } catch (error) {
+    console.error('Ghost session status error:', error);
+    res.status(500).json({ error: 'Failed to get session status' });
+  }
+});
+
+router.post('/direct-enter', authenticateToken, async (req, res) => {
+  try {
+    const { partnerId, deviceType = 'desktop' } = req.body;
+    const username = req.user.username;
+    
+    const participants = [username, partnerId].sort();
+    
+    const session = await GhostChatSession.findOne({
+      participants: { $all: participants },
+      isActive: true,
+      ghostEnabled: true,
+      ghostTerminated: { $ne: true },
+    });
+    
+    if (!session) {
+      return res.status(404).json({ error: 'No active Ghost session found' });
+    }
+    
+    const hasJoined = session.joinedUsers?.includes(username) || false;
+    const isCreator = session.createdBy === username;
+    
+    if (!hasJoined && !isCreator) {
+      return res.status(403).json({ error: 'You must enter PIN to join Ghost Mode first' });
+    }
+    
+    await GhostChatSession.findByIdAndUpdate(session._id, {
+      lastActivity: new Date(),
+    });
+    
+    const access = await GhostChatAccess.findOne({
+      sessionId: session.sessionId,
+      userId: username,
+      isActive: true,
+    });
+    
+    if (access) {
+      await GhostChatAccess.findByIdAndUpdate(access._id, {
+        lastActivity: new Date(),
+        accessGranted: true,
+      });
+    }
+    
+    await logGhostAccess(session.sessionId, username, 'direct_enter', deviceType, { partnerId }, req);
+    
+    res.json({
+      success: true,
+      sessionId: session.sessionId,
+      sessionKey: session.sessionKey,
+      partnerId,
+      participants: session.participants,
+      expireAt: session.expireAt,
+    });
+  } catch (error) {
+    console.error('Ghost direct enter error:', error);
+    res.status(500).json({ error: 'Failed to enter Ghost Mode' });
   }
 });
 
