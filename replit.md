@@ -41,18 +41,18 @@ Lockblip is a secure, end-to-end encrypted chat application with blockchain-back
 
 - **Ghost Mode Chat System**:
   - Completely isolated encrypted chat sessions
-  - PIN-based authentication (6-digit with bcrypt hash storage)
+  - System-generated 6-digit PINs (no manual PIN editing allowed)
   - Per-session AES-256 encryption keys that rotate on session start/end
-  - Gesture activation (long-press, shake detection) + Desktop button access
+  - **Mandatory Disclaimer Agreement**: Users must accept confidentiality warning before activation
+  - **Auto-PIN Generation & Sharing**: System generates PIN and auto-sends message in normal chat
   - Dark neon UI with Matrix rain effect
   - All messages auto-expire after 24 hours (TTL indexes)
   - No message persistence - complete invisibility
   - Screenshot detection with privacy blur overlay
   - Session heartbeat for automatic termination
-  - **PC/Desktop Support**: Ghost Mode button visible in chat header for desktop/laptop users
-  - **Automatic PIN Sharing**: When activated, system generates 6-digit PIN and sends notification in normal chat
+  - **No Profile Setup Required**: Ghost Mode auto-creates user record on first activation
   - **GhostChatAccess Table**: Stores {user_id, partner_id, pin_hash, created_at, expire_at, device_type}
-  - **Access Logging**: Full visibility logs for access events (session_created, pin_generated, access_granted, etc.) with zero message content stored
+  - **Access Logging**: Full visibility logs with disclaimer_agreed status
   - **Re-authentication**: PIN re-auth required on idle timeout or visibility change
   - **Cross-Platform Security**: Equal security on mobile and desktop (blur on window switch, auto-lock on idle)
 

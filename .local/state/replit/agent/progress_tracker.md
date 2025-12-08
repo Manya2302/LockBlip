@@ -48,3 +48,16 @@
 [x] 5. Added contactId prop to ChatWindow for Ghost Mode partner identification
 [x] 6. Ghost Mode button now visible for all chats with contacts
 [x] 7. Server running successfully - no errors
+
+## Ghost Mode Disclaimer & Auto-PIN Flow (Dec 8, 2025)
+[x] 1. Rewrote GhostModeButton with mandatory disclaimer popup (Confidentiality Warning)
+[x] 2. Added checkbox agreement: "I understand and agree..." before Generate button
+[x] 3. Removed all manual PIN typing - only system-generated 6-digit PINs
+[x] 4. Auto-sends message in normal chat: "Ghost Mode activated by <username>, Ghost PIN: <pin>"
+[x] 5. Updated /activate endpoint to require disclaimerAgreed=true (server validation)
+[x] 6. Auto-creates GhostUser if not exists (no profile setup required)
+[x] 7. Updated GhostAccessLog model with disclaimer_agreed event type
+[x] 8. Updated useGhostMode hook activateWithPartner to accept disclaimerAgreed param
+[x] 9. Removed profile setup requirement, checkGhostStatus, isGhostModeSetup from home.tsx
+[x] 10. Added copy-to-clipboard icon for generated PIN with visual feedback
+[x] 11. Server running successfully - all changes deployed
