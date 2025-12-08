@@ -36,8 +36,8 @@ interface GhostModeButtonProps {
   partnerName?: string;
   onActivate: (partnerId: string, deviceType: string, disclaimerAgreed: boolean) => Promise<{ pin: string; sessionId: string } | null>;
   onJoin: (pin: string, deviceType: string) => Promise<boolean>;
-  onDirectEnter: (partnerId: string, deviceType: string) => Promise<any>;
-  onCheckStatus: (partnerId: string) => Promise<GhostSessionStatus | null>;
+  onDirectEnter?: (partnerId: string, deviceType: string) => Promise<any>;
+  onCheckStatus?: (partnerId: string) => Promise<GhostSessionStatus | null>;
   onSendMessage?: (message: string) => void;
   onEnterGhostMode?: () => void;
   className?: string;
@@ -148,18 +148,16 @@ export function GhostModeButton({
   };
 
   const checkStatus = async () => {
+    if (!onCheckStatus) {
+      setMode('choose');
+      return;
+    }
+    
     setMode('loading');
     try {
       const status = await onCheckStatus(partnerId);
       setSessionStatus(status);
-      
-      if (status?.canEnterDirectly) {
-        setMode('choose');
-      } else if (status?.needsPin) {
-        setMode('choose');
-      } else {
-        setMode('choose');
-      }
+      setMode('choose');
     } catch (err) {
       console.error('Failed to check ghost status:', err);
       setMode('choose');
@@ -176,6 +174,11 @@ export function GhostModeButton({
   };
 
   const handleDirectEnter = async () => {
+    if (!onDirectEnter) {
+      setError('Direct enter not available');
+      return;
+    }
+    
     setLoading(true);
     setError('');
     

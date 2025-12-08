@@ -447,6 +447,8 @@ router.post('/activate', authenticateToken, async (req, res) => {
     const { partnerId, deviceType = 'desktop', disclaimerAgreed = false } = req.body;
     const username = req.user.username;
     
+    console.log(`👻 Ghost Mode activation by: ${username} for partner: ${partnerId}`);
+    
     if (!partnerId) {
       return res.status(400).json({ error: 'Partner ID required' });
     }
@@ -562,6 +564,8 @@ router.post('/join', authenticateToken, async (req, res) => {
     const { pin, deviceType = 'desktop' } = req.body;
     const username = req.user.username;
     
+    console.log(`👻 Ghost join attempt by: ${username} with PIN: ${pin?.substring(0, 2)}****`);
+    
     if (!pin || pin.length !== 6) {
       return res.status(400).json({ error: 'Valid 6-digit PIN required' });
     }
@@ -572,6 +576,8 @@ router.post('/join', authenticateToken, async (req, res) => {
       accessGranted: false,
       expireAt: { $gt: new Date() },
     });
+    
+    console.log(`👻 Found ${accessRecords.length} pending access records for user: ${username}`);
     
     let matchedAccess = null;
     for (const record of accessRecords) {

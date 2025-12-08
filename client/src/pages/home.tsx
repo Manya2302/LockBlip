@@ -205,7 +205,12 @@ export default function Home({ onLogout }: HomeProps) {
   const {
     activateWithPartner,
     joinWithPin,
+    checkSessionStatus,
+    directEnter,
+    setIsGhostModeActive,
   } = useGhostMode({ socket: socketRef.current });
+
+  const [ghostModeViewActive, setGhostModeViewActive] = useState(false);
 
   const handleGhostModeActivate = useCallback(async (partnerId: string, deviceType: string, disclaimerAgreed: boolean) => {
     return await activateWithPartner(partnerId, deviceType, disclaimerAgreed);
@@ -214,6 +219,20 @@ export default function Home({ onLogout }: HomeProps) {
   const handleGhostModeJoin = useCallback(async (pin: string, deviceType: string) => {
     return await joinWithPin(pin, deviceType);
   }, [joinWithPin]);
+
+  const handleCheckGhostStatus = useCallback(async (partnerId: string) => {
+    return await checkSessionStatus(partnerId);
+  }, [checkSessionStatus]);
+
+  const handleDirectEnterGhost = useCallback(async (partnerId: string, deviceType: string) => {
+    const result = await directEnter(partnerId, deviceType);
+    return !!result;
+  }, [directEnter]);
+
+  const handleEnterGhostMode = useCallback(() => {
+    setGhostModeViewActive(true);
+    setIsGhostModeActive(true);
+  }, [setIsGhostModeActive]);
 
   const [pendingOffer, setPendingOffer] = useState<{
     from: string;
@@ -1021,6 +1040,9 @@ export default function Home({ onLogout }: HomeProps) {
               contactId={activeContact?.id}
               onGhostModeActivate={handleGhostModeActivate}
               onGhostModeJoin={handleGhostModeJoin}
+              onGhostModeCheckStatus={handleCheckGhostStatus}
+              onGhostModeDirectEnter={handleDirectEnterGhost}
+              onEnterGhostMode={handleEnterGhostMode}
             />
           ) : activeView === "missedCalls" ? (
             <MissedCallHistory 

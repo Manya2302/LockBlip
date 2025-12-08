@@ -51,6 +51,9 @@ interface ChatWindowProps {
   missedCallCounts?: MissedCallCounts;
   onGhostModeActivate?: (partnerId: string, deviceType: string, disclaimerAgreed: boolean) => Promise<{ pin: string; sessionId: string } | null>;
   onGhostModeJoin?: (pin: string, deviceType: string) => Promise<boolean>;
+  onGhostModeCheckStatus?: (partnerId: string) => Promise<any>;
+  onGhostModeDirectEnter?: (partnerId: string, deviceType: string) => Promise<boolean>;
+  onEnterGhostMode?: () => void;
 }
 
 export default function ChatWindow({
@@ -78,6 +81,9 @@ export default function ChatWindow({
   missedCallCounts = { voice: 0, video: 0 },
   onGhostModeActivate,
   onGhostModeJoin,
+  onGhostModeCheckStatus,
+  onGhostModeDirectEnter,
+  onEnterGhostMode,
 }: ChatWindowProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -275,12 +281,15 @@ export default function ChatWindow({
               </span>
             )}
           </div>
-          {contactId && onGhostModeActivate && onGhostModeJoin && (
+          {contactName && onGhostModeActivate && onGhostModeJoin && (
             <GhostModeButton
-              partnerId={contactId}
+              partnerId={contactName}
               partnerName={contactName}
               onActivate={onGhostModeActivate}
               onJoin={onGhostModeJoin}
+              onCheckStatus={onGhostModeCheckStatus}
+              onDirectEnter={onGhostModeDirectEnter}
+              onEnterGhostMode={onEnterGhostMode}
               onSendMessage={onSendMessage}
             />
           )}
