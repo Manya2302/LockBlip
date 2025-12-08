@@ -444,16 +444,25 @@ router.put('/settings', authenticateToken, async (req, res) => {
 
 router.post('/activate', authenticateToken, async (req, res) => {
   try {
-    const { partnerId, deviceType = 'desktop' } = req.body;
+    const { partnerId, deviceType = 'desktop', disclaimerAgreed = false } = req.body;
     const username = req.user.username;
     
     if (!partnerId) {
       return res.status(400).json({ error: 'Partner ID required' });
     }
     
-    const ghostUser = await GhostUser.findOne({ username });
+    if (!disclaimerAgreed) {
+      return res.status(400).json({ error: 'You must agree to the disclaimer to activate Ghost Mode' });
+    }
+    
+    let ghostUser = await GhostUser.findOne({ username });
     if (!ghostUser) {
-      return res.status(400).json({ error: 'Ghost mode not set up. Please set up your personal PIN first.' });
+      const defaultPin = GhostUser.hashPin(crypto.randomBytes(16).toString('hex'));
+      ghostUser = await GhostUser.create({
+        username,
+        ghostPin: defaultPin,
+        ghostEnabled: true,
+      });
     }
     
     const pin = GhostChatAccess.generatePin();
@@ -520,8 +529,8 @@ router.post('/activate', authenticateToken, async (req, res) => {
       accessGranted: false,
     });
     
-    await logGhostAccess(finalSessionId, username, 'session_created', deviceType, { partnerId }, req);
-    await logGhostAccess(finalSessionId, username, 'pin_generated', deviceType, {}, req);
+    await logGhostAccess(finalSessionId, username, 'session_created', deviceType, { partnerId, disclaimerAgreed: true }, req);
+    await logGhostAccess(finalSessionId, username, 'pin_generated', deviceType, { disclaimerAgreed: true }, req);
     
     res.json({
       success: true,

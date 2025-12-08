@@ -267,7 +267,7 @@ export function useGhostMode(options: UseGhostModeOptions) {
     }
   }, [sessionToken]);
 
-  const activateWithPartner = useCallback(async (partnerId: string, deviceType: string = 'desktop'): Promise<{ pin: string; sessionId: string } | null> => {
+  const activateWithPartner = useCallback(async (partnerId: string, deviceType: string = 'desktop', disclaimerAgreed: boolean = false): Promise<{ pin: string; sessionId: string } | null> => {
     try {
       setIsLoading(true);
       const token = localStorage.getItem('authToken');
@@ -277,7 +277,7 @@ export function useGhostMode(options: UseGhostModeOptions) {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ partnerId, deviceType }),
+        body: JSON.stringify({ partnerId, deviceType, disclaimerAgreed }),
       });
       
       if (response.ok) {

@@ -203,32 +203,17 @@ export default function Home({ onLogout }: HomeProps) {
   } = useMissedCalls(token, socketRef);
 
   const {
-    isSetUp: isGhostModeSetup,
     activateWithPartner,
     joinWithPin,
-    checkGhostStatus,
   } = useGhostMode({ socket: socketRef.current });
 
-  const [showGhostSetupDialog, setShowGhostSetupDialog] = useState(false);
-
-  useEffect(() => {
-    if (token) {
-      checkGhostStatus();
-    }
-  }, [token, checkGhostStatus]);
-
-  const handleGhostModeActivate = useCallback(async (partnerId: string, deviceType: string) => {
-    return await activateWithPartner(partnerId, deviceType);
+  const handleGhostModeActivate = useCallback(async (partnerId: string, deviceType: string, disclaimerAgreed: boolean) => {
+    return await activateWithPartner(partnerId, deviceType, disclaimerAgreed);
   }, [activateWithPartner]);
 
   const handleGhostModeJoin = useCallback(async (pin: string, deviceType: string) => {
     return await joinWithPin(pin, deviceType);
   }, [joinWithPin]);
-
-  const handleGhostModeSetupRequired = useCallback(() => {
-    setShowGhostSetupDialog(true);
-    alert('Ghost Mode requires initial setup. Please go to your profile settings to set up Ghost Mode with a PIN.');
-  }, []);
 
   const [pendingOffer, setPendingOffer] = useState<{
     from: string;
@@ -1036,8 +1021,6 @@ export default function Home({ onLogout }: HomeProps) {
               contactId={activeContact?.id}
               onGhostModeActivate={handleGhostModeActivate}
               onGhostModeJoin={handleGhostModeJoin}
-              isGhostModeSetup={isGhostModeSetup}
-              onGhostModeSetupRequired={handleGhostModeSetupRequired}
             />
           ) : activeView === "missedCalls" ? (
             <MissedCallHistory 

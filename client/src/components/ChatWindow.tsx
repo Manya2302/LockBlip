@@ -49,10 +49,8 @@ interface ChatWindowProps {
   onStartVideoCall?: () => void;
   onStartAudioCall?: () => void;
   missedCallCounts?: MissedCallCounts;
-  onGhostModeActivate?: (partnerId: string, deviceType: string) => Promise<{ pin: string; sessionId: string } | null>;
+  onGhostModeActivate?: (partnerId: string, deviceType: string, disclaimerAgreed: boolean) => Promise<{ pin: string; sessionId: string } | null>;
   onGhostModeJoin?: (pin: string, deviceType: string) => Promise<boolean>;
-  isGhostModeSetup?: boolean;
-  onGhostModeSetupRequired?: () => void;
 }
 
 export default function ChatWindow({
@@ -80,8 +78,6 @@ export default function ChatWindow({
   missedCallCounts = { voice: 0, video: 0 },
   onGhostModeActivate,
   onGhostModeJoin,
-  isGhostModeSetup = false,
-  onGhostModeSetupRequired,
 }: ChatWindowProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -279,14 +275,13 @@ export default function ChatWindow({
               </span>
             )}
           </div>
-          {contactId && onGhostModeActivate && onGhostModeJoin && onGhostModeSetupRequired && (
+          {contactId && onGhostModeActivate && onGhostModeJoin && (
             <GhostModeButton
               partnerId={contactId}
               partnerName={contactName}
               onActivate={onGhostModeActivate}
               onJoin={onGhostModeJoin}
-              isGhostModeSetup={isGhostModeSetup}
-              onSetupRequired={onGhostModeSetupRequired}
+              onSendMessage={onSendMessage}
             />
           )}
         </div>

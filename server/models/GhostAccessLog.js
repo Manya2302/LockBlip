@@ -19,6 +19,7 @@ const ghostAccessLogSchema = new mongoose.Schema({
       'session_created',
       'pin_generated',
       'pin_shared',
+      'disclaimer_agreed',
       'access_requested',
       'access_granted',
       'access_denied',
