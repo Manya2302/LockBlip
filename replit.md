@@ -41,14 +41,20 @@ Lockblip is a secure, end-to-end encrypted chat application with blockchain-back
 
 - **Ghost Mode Chat System**:
   - Completely isolated encrypted chat sessions
-  - PIN-based authentication (6-digit with hash storage)
+  - PIN-based authentication (6-digit with bcrypt hash storage)
   - Per-session AES-256 encryption keys that rotate on session start/end
-  - Gesture activation (long-press, shake detection)
+  - Gesture activation (long-press, shake detection) + Desktop button access
   - Dark neon UI with Matrix rain effect
   - All messages auto-expire after 24 hours (TTL indexes)
   - No message persistence - complete invisibility
   - Screenshot detection with privacy blur overlay
   - Session heartbeat for automatic termination
+  - **PC/Desktop Support**: Ghost Mode button visible in chat header for desktop/laptop users
+  - **Automatic PIN Sharing**: When activated, system generates 6-digit PIN and sends notification in normal chat
+  - **GhostChatAccess Table**: Stores {user_id, partner_id, pin_hash, created_at, expire_at, device_type}
+  - **Access Logging**: Full visibility logs for access events (session_created, pin_generated, access_granted, etc.) with zero message content stored
+  - **Re-authentication**: PIN re-auth required on idle timeout or visibility change
+  - **Cross-Platform Security**: Equal security on mobile and desktop (blur on window switch, auto-lock on idle)
 
 ## Recent Changes (Dec 4, 2025)
 - **Missed Call Tracking System** (WhatsApp-style):
@@ -122,6 +128,8 @@ The application uses MongoDB with Mongoose models:
 - **GhostChatSession:** Isolated ghost chat sessions with per-session encryption keys
 - **GhostMessage:** Ghost mode messages with TTL indexes for auto-expiry
 - **GhostUser:** PIN authentication storage for ghost mode access
+- **GhostChatAccess:** PIN sharing and access control with user_id, partner_id, pin_hash, device_type, expire_at
+- **GhostAccessLog:** Access event logging (no message content) for visibility and audit trails
 
 ## Known Issues
 - WebGL not available in Replit environment (3D landing page falls back to 2D)
