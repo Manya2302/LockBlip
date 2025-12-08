@@ -267,6 +267,154 @@ export function useGhostMode(options: UseGhostModeOptions) {
     }
   }, [sessionToken]);
 
+  const activateWithPartner = useCallback(async (partnerId: string, deviceType: string = 'desktop'): Promise<{ pin: string; sessionId: string } | null> => {
+    try {
+      setIsLoading(true);
+      const token = localStorage.getItem('authToken');
+      const response = await fetch('/api/ghost/activate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ partnerId, deviceType }),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        
+        if (socket) {
+          socket.emit('ghost-mode-activated', {
+            partnerId,
+            pin: data.pin,
+            sessionId: data.sessionId,
+          });
+        }
+        
+        setCurrentSession({
+          sessionId: data.sessionId,
+          participants: [partnerId],
+          sessionKey: '',
+          expireAt: data.expireAt,
+        });
+        setIsGhostModeActive(true);
+        
+        return { pin: data.pin, sessionId: data.sessionId };
+      }
+      
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Activation failed');
+    } catch (error: any) {
+      console.error('Ghost activate error:', error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [socket]);
+
+  const joinWithPin = useCallback(async (pin: string, deviceType: string = 'desktop'): Promise<boolean> => {
+    try {
+      setIsLoading(true);
+      const token = localStorage.getItem('authToken');
+      const response = await fetch('/api/ghost/join', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ pin, deviceType }),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        
+        setCurrentSession({
+          sessionId: data.sessionId,
+          participants: data.participants,
+          sessionKey: data.sessionKey,
+          expireAt: data.expireAt,
+        });
+        setIsGhostModeActive(true);
+        
+        if (socket) {
+          socket.emit('ghost-partner-joined', {
+            sessionId: data.sessionId,
+            partnerId: data.partnerId,
+          });
+        }
+        
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Ghost join error:', error);
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [socket]);
+
+  const reauthenticate = useCallback(async (sessionId: string, pin: string, deviceType: string = 'desktop'): Promise<boolean> => {
+    try {
+      setIsLoading(true);
+      const token = localStorage.getItem('authToken');
+      const response = await fetch('/api/ghost/reauth', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ sessionId, pin, deviceType }),
+      });
+      
+      if (response.ok) {
+        resetIdleTimer();
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Ghost reauth error:', error);
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [resetIdleTimer]);
+
+  const logSecurityEvent = useCallback(async (sessionId: string, eventType: string, deviceType: string = 'desktop') => {
+    if (socket) {
+      socket.emit('ghost-security-event', {
+        sessionId,
+        eventType,
+        deviceType,
+      });
+    }
+  }, [socket]);
+
+  const terminateSession = useCallback(async (sessionId: string): Promise<boolean> => {
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch('/api/ghost/terminate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ sessionId }),
+      });
+      
+      if (response.ok) {
+        setCurrentSession(null);
+        setMessages([]);
+        setIsGhostModeActive(false);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Ghost terminate error:', error);
+      return false;
+    }
+  }, []);
+
   useEffect(() => {
     if (!socket || !isGhostModeActive) return;
 
@@ -371,6 +519,11 @@ export function useGhostMode(options: UseGhostModeOptions) {
     markMessageViewed,
     resetIdleTimer,
     setCurrentSession,
+    activateWithPartner,
+    joinWithPin,
+    reauthenticate,
+    logSecurityEvent,
+    terminateSession,
   };
 }
 

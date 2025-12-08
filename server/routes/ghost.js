@@ -4,12 +4,31 @@ import jwt from 'jsonwebtoken';
 import GhostUser from '../models/GhostUser.js';
 import GhostChatSession, { generateSessionKey, encryptWithSessionKey, decryptWithSessionKey } from '../models/GhostChat.js';
 import GhostMessage from '../models/GhostMessage.js';
+import GhostChatAccess from '../models/GhostChatAccess.js';
+import GhostAccessLog from '../models/GhostAccessLog.js';
 import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
 
 const GHOST_SESSION_DURATION = 30 * 60 * 1000;
 const DEFAULT_MESSAGE_EXPIRY = 24 * 60 * 60 * 1000;
+const GHOST_ACCESS_EXPIRY = 60 * 60 * 1000;
+
+async function logGhostAccess(sessionId, userId, eventType, deviceType, metadata = {}, req = null) {
+  try {
+    await GhostAccessLog.create({
+      sessionId,
+      userId,
+      eventType,
+      deviceType,
+      ipAddress: req?.ip || null,
+      userAgent: req?.get('user-agent') || null,
+      metadata,
+    });
+  } catch (error) {
+    console.error('Ghost access log error:', error);
+  }
+}
 
 router.post('/setup', authenticateToken, async (req, res) => {
   try {
@@ -420,6 +439,317 @@ router.put('/settings', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Ghost settings update error:', error);
     res.status(500).json({ error: 'Failed to update settings' });
+  }
+});
+
+router.post('/activate', authenticateToken, async (req, res) => {
+  try {
+    const { partnerId, deviceType = 'desktop' } = req.body;
+    const username = req.user.username;
+    
+    if (!partnerId) {
+      return res.status(400).json({ error: 'Partner ID required' });
+    }
+    
+    const ghostUser = await GhostUser.findOne({ username });
+    if (!ghostUser) {
+      return res.status(400).json({ error: 'Ghost mode not set up. Please set up your personal PIN first.' });
+    }
+    
+    const pin = GhostChatAccess.generatePin();
+    const pinHash = await GhostChatAccess.hashPin(pin);
+    
+    const sessionId = crypto.randomBytes(16).toString('hex');
+    const sessionKey = generateSessionKey();
+    const expireAt = new Date(Date.now() + DEFAULT_MESSAGE_EXPIRY);
+    const accessExpireAt = new Date(Date.now() + GHOST_ACCESS_EXPIRY);
+    
+    const participants = [username, partnerId].sort();
+    
+    let existingSession = await GhostChatSession.findOne({
+      participants: { $all: participants },
+      isActive: true,
+    });
+    
+    let finalSessionId = sessionId;
+    let finalSessionKey = sessionKey;
+    
+    if (existingSession) {
+      finalSessionId = existingSession.sessionId;
+      finalSessionKey = existingSession.sessionKey;
+      
+      await GhostChatSession.findByIdAndUpdate(existingSession._id, {
+        lastActivity: new Date(),
+      });
+    } else {
+      await GhostChatSession.create({
+        sessionId,
+        participants,
+        sessionKey,
+        createdBy: username,
+        expireAt,
+      });
+    }
+    
+    await GhostChatAccess.deleteMany({
+      userId: username,
+      partnerId: partnerId,
+      isActive: true,
+    });
+    
+    await GhostChatAccess.create({
+      sessionId: finalSessionId,
+      userId: username,
+      partnerId: partnerId,
+      pinHash,
+      deviceType,
+      expireAt: accessExpireAt,
+      isActive: true,
+      accessGranted: true,
+      accessGrantedAt: new Date(),
+    });
+    
+    await GhostChatAccess.create({
+      sessionId: finalSessionId,
+      userId: partnerId,
+      partnerId: username,
+      pinHash,
+      deviceType: 'unknown',
+      expireAt: accessExpireAt,
+      isActive: true,
+      accessGranted: false,
+    });
+    
+    await logGhostAccess(finalSessionId, username, 'session_created', deviceType, { partnerId }, req);
+    await logGhostAccess(finalSessionId, username, 'pin_generated', deviceType, {}, req);
+    
+    res.json({
+      success: true,
+      sessionId: finalSessionId,
+      pin,
+      partnerId,
+      expireAt: accessExpireAt,
+      message: `Ghost Mode activated by ${username}`,
+    });
+  } catch (error) {
+    console.error('Ghost activate error:', error);
+    res.status(500).json({ error: 'Failed to activate Ghost Mode' });
+  }
+});
+
+router.post('/join', authenticateToken, async (req, res) => {
+  try {
+    const { pin, deviceType = 'desktop' } = req.body;
+    const username = req.user.username;
+    
+    if (!pin || pin.length !== 6) {
+      return res.status(400).json({ error: 'Valid 6-digit PIN required' });
+    }
+    
+    const accessRecords = await GhostChatAccess.find({
+      userId: username,
+      isActive: true,
+      accessGranted: false,
+      expireAt: { $gt: new Date() },
+    });
+    
+    let matchedAccess = null;
+    for (const record of accessRecords) {
+      const isValid = await GhostChatAccess.verifyPin(pin, record.pinHash);
+      if (isValid) {
+        matchedAccess = record;
+        break;
+      }
+    }
+    
+    if (!matchedAccess) {
+      await logGhostAccess('unknown', username, 'access_denied', deviceType, { reason: 'invalid_pin' }, req);
+      return res.status(401).json({ error: 'Invalid PIN or expired invitation' });
+    }
+    
+    const session = await GhostChatSession.findOne({
+      sessionId: matchedAccess.sessionId,
+      isActive: true,
+    });
+    
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found or expired' });
+    }
+    
+    await GhostChatAccess.findByIdAndUpdate(matchedAccess._id, {
+      accessGranted: true,
+      accessGrantedAt: new Date(),
+      deviceType,
+      lastActivity: new Date(),
+    });
+    
+    await logGhostAccess(matchedAccess.sessionId, username, 'access_granted', deviceType, { partnerId: matchedAccess.partnerId }, req);
+    await logGhostAccess(matchedAccess.sessionId, username, 'session_joined', deviceType, {}, req);
+    
+    res.json({
+      success: true,
+      sessionId: matchedAccess.sessionId,
+      sessionKey: session.sessionKey,
+      partnerId: matchedAccess.partnerId,
+      participants: session.participants,
+      expireAt: session.expireAt,
+    });
+  } catch (error) {
+    console.error('Ghost join error:', error);
+    res.status(500).json({ error: 'Failed to join Ghost Mode' });
+  }
+});
+
+router.post('/validate-access', authenticateToken, async (req, res) => {
+  try {
+    const { sessionId } = req.body;
+    const username = req.user.username;
+    
+    const access = await GhostChatAccess.findOne({
+      sessionId,
+      userId: username,
+      isActive: true,
+      accessGranted: true,
+      expireAt: { $gt: new Date() },
+    });
+    
+    if (!access) {
+      return res.json({ valid: false, reason: 'no_access' });
+    }
+    
+    const session = await GhostChatSession.findOne({
+      sessionId,
+      isActive: true,
+    });
+    
+    if (!session) {
+      return res.json({ valid: false, reason: 'session_expired' });
+    }
+    
+    await GhostChatAccess.findByIdAndUpdate(access._id, {
+      lastActivity: new Date(),
+    });
+    
+    res.json({
+      valid: true,
+      sessionKey: session.sessionKey,
+      partnerId: access.partnerId,
+      participants: session.participants,
+    });
+  } catch (error) {
+    console.error('Ghost validate access error:', error);
+    res.status(500).json({ valid: false, error: 'Validation failed' });
+  }
+});
+
+router.post('/reauth', authenticateToken, async (req, res) => {
+  try {
+    const { sessionId, pin, deviceType = 'desktop' } = req.body;
+    const username = req.user.username;
+    
+    const access = await GhostChatAccess.findOne({
+      sessionId,
+      userId: username,
+      isActive: true,
+    });
+    
+    if (!access) {
+      return res.status(404).json({ error: 'No access record found' });
+    }
+    
+    const isValid = await GhostChatAccess.verifyPin(pin, access.pinHash);
+    
+    if (!isValid) {
+      await logGhostAccess(sessionId, username, 'reauth_failed', deviceType, {}, req);
+      return res.status(401).json({ error: 'Invalid PIN' });
+    }
+    
+    const newExpiry = new Date(Date.now() + GHOST_ACCESS_EXPIRY);
+    await GhostChatAccess.findByIdAndUpdate(access._id, {
+      expireAt: newExpiry,
+      lastActivity: new Date(),
+    });
+    
+    await logGhostAccess(sessionId, username, 'reauth_success', deviceType, {}, req);
+    
+    res.json({ success: true, expireAt: newExpiry });
+  } catch (error) {
+    console.error('Ghost reauth error:', error);
+    res.status(500).json({ error: 'Re-authentication failed' });
+  }
+});
+
+router.post('/log-event', authenticateToken, async (req, res) => {
+  try {
+    const { sessionId, eventType, deviceType = 'desktop', metadata = {} } = req.body;
+    const username = req.user.username;
+    
+    const validEvents = ['screenshot_attempt', 'blur_activated', 'idle_lock', 'reauth_required'];
+    if (!validEvents.includes(eventType)) {
+      return res.status(400).json({ error: 'Invalid event type' });
+    }
+    
+    await logGhostAccess(sessionId, username, eventType, deviceType, metadata, req);
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Ghost log event error:', error);
+    res.status(500).json({ error: 'Failed to log event' });
+  }
+});
+
+router.get('/access-logs/:sessionId', authenticateToken, async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const username = req.user.username;
+    
+    const access = await GhostChatAccess.findOne({
+      sessionId,
+      userId: username,
+      isActive: true,
+    });
+    
+    if (!access) {
+      return res.status(403).json({ error: 'No access to this session' });
+    }
+    
+    const logs = await GhostAccessLog.find({ sessionId })
+      .sort({ timestamp: -1 })
+      .limit(100)
+      .lean();
+    
+    res.json({ logs });
+  } catch (error) {
+    console.error('Ghost access logs error:', error);
+    res.status(500).json({ error: 'Failed to get access logs' });
+  }
+});
+
+router.post('/terminate', authenticateToken, async (req, res) => {
+  try {
+    const { sessionId, deviceType = 'desktop' } = req.body;
+    const username = req.user.username;
+    
+    const session = await GhostChatSession.findOne({
+      sessionId,
+      participants: username,
+      isActive: true,
+    });
+    
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+    
+    await GhostChatSession.findByIdAndUpdate(session._id, { isActive: false });
+    await GhostChatAccess.updateMany({ sessionId }, { isActive: false });
+    await GhostMessage.deleteMany({ sessionId });
+    
+    await logGhostAccess(sessionId, username, 'session_terminated', deviceType, {}, req);
+    
+    res.json({ success: true, message: 'Session terminated and all messages deleted' });
+  } catch (error) {
+    console.error('Ghost terminate error:', error);
+    res.status(500).json({ error: 'Failed to terminate session' });
   }
 });
 

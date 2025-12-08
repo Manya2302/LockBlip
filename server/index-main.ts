@@ -998,6 +998,147 @@ io.on('connection', async (socket: AuthenticatedSocket) => {
       console.error('Ghost message viewed error:', error);
     }
   });
+
+  // Ghost mode activation notification (send to normal chat)
+  socket.on('ghost-mode-activated', async (data) => {
+    try {
+      const { partnerId, pin, sessionId } = data;
+      
+      if (!socket.username || !partnerId) {
+        return;
+      }
+      
+      const notificationMessage = `👻 Ghost Mode activated by ${socket.username}, PIN: ${pin}`;
+      
+      const chatRoomId = [socket.username, partnerId].sort().join('_');
+      
+      const senderKeys = await getChatKeys(socket.username, partnerId);
+      const receiverKeys = await getChatKeys(partnerId, socket.username);
+      
+      if (!senderKeys || !receiverKeys) {
+        console.log('Ghost activation: Could not get chat keys for notification');
+        return;
+      }
+      
+      const previousHash = await getPreviousMessageHash(chatRoomId);
+      const hash = calculateMessageHash({
+        senderId: 'LockBlip',
+        receiverId: partnerId,
+        content: notificationMessage,
+        previousHash,
+      });
+      
+      const encryptedForSender = encryptMessageWithChatKeys(notificationMessage, senderKeys.chatPublicKey);
+      const encryptedForReceiver = encryptMessageWithChatKeys(notificationMessage, receiverKeys.chatPublicKey);
+      
+      const chatMessage = await Chat.create({
+        chatRoomId,
+        senderId: 'LockBlip',
+        receiverId: partnerId,
+        encryptedForSender,
+        encryptedForReceiver,
+        hash,
+        previousHash,
+        isSystem: true,
+        messageType: 'text',
+      });
+      
+      const recipientSocketId = userSockets.get(partnerId);
+      if (recipientSocketId) {
+        io.to(recipientSocketId).emit('ghost-mode-invitation', {
+          from: socket.username,
+          pin,
+          sessionId,
+          timestamp: new Date(),
+        });
+        
+        io.to(recipientSocketId).emit('receive-message', {
+          id: chatMessage._id.toString(),
+          senderId: 'LockBlip',
+          receiverId: partnerId,
+          content: notificationMessage,
+          chatRoomId,
+          timestamp: chatMessage.timestamp,
+          isSystem: true,
+        });
+      }
+      
+      socket.emit('receive-message', {
+        id: chatMessage._id.toString(),
+        senderId: 'LockBlip',
+        receiverId: partnerId,
+        content: notificationMessage,
+        chatRoomId,
+        timestamp: chatMessage.timestamp,
+        isSystem: true,
+      });
+      
+      console.log(`👻 Ghost mode activation notification sent: ${socket.username} -> ${partnerId}`);
+    } catch (error) {
+      console.error('Ghost mode activation notification error:', error);
+    }
+  });
+
+  // Ghost mode security events
+  socket.on('ghost-security-event', async (data) => {
+    try {
+      const { sessionId, eventType, deviceType = 'desktop' } = data;
+      
+      if (!socket.username) return;
+      
+      const GhostAccessLog = (await import('./models/GhostAccessLog.js')).default;
+      
+      await GhostAccessLog.create({
+        sessionId,
+        userId: socket.username,
+        eventType,
+        deviceType,
+        timestamp: new Date(),
+      });
+      
+      const session = await GhostChatSession.findOne({ sessionId, isActive: true });
+      if (session) {
+        const partnerId = session.participants.find(p => p !== socket.username);
+        if (partnerId) {
+          const partnerSocketId = userSockets.get(partnerId);
+          if (partnerSocketId) {
+            io.to(partnerSocketId).emit('ghost-partner-security-alert', {
+              from: socket.username,
+              sessionId,
+              eventType,
+              timestamp: new Date(),
+            });
+          }
+        }
+      }
+      
+      console.log(`🔒 Ghost security event: ${socket.username} - ${eventType}`);
+    } catch (error) {
+      console.error('Ghost security event error:', error);
+    }
+  });
+
+  // Ghost mode partner joined notification
+  socket.on('ghost-partner-joined', async (data) => {
+    try {
+      const { sessionId, partnerId } = data;
+      
+      if (!socket.username) return;
+      
+      const partnerSocketId = userSockets.get(partnerId);
+      if (partnerSocketId) {
+        io.to(partnerSocketId).emit('ghost-session-ready', {
+          sessionId,
+          partner: socket.username,
+          timestamp: new Date(),
+        });
+      }
+      
+      console.log(`👻 Ghost session ready: ${socket.username} <-> ${partnerId}`);
+    } catch (error) {
+      console.error('Ghost partner joined error:', error);
+    }
+  });
 });
 
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
