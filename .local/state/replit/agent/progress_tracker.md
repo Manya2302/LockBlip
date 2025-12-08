@@ -28,3 +28,14 @@
 [x] 12. Create SelfDestructMessage component with countdown timers and visual effects
 [x] 13. Create ScreenshotAlert component for screenshot notification
 [x] 14. Tested: Server running with deletion worker started
+
+## Ghost Mode PC Button + PIN Sharing Extension (Dec 8, 2025)
+[x] 1. Created GhostChatAccess model with user_id, partner_id, pin_hash, created_at, expire_at, device_type
+[x] 2. Created GhostAccessLog model for access event logging (no message content)
+[x] 3. Updated ghost routes: /activate, /join, /validate-access, /reauth, /log-event, /terminate
+[x] 4. Added socket events for Ghost Mode activation notifications in normal chat
+[x] 5. Created GhostModeButton component for desktop/laptop users
+[x] 6. Created GhostPinEntry component for PIN input dialog
+[x] 7. Updated useGhostMode hook with activateWithPartner, joinWithPin, reauthenticate, logSecurityEvent
+[x] 8. Implemented session security: screen blur, auto-lock on idle, PIN re-auth
+[x] 9. All tests passing - server running successfully
