@@ -61,3 +61,7 @@
 [x] 9. Removed profile setup requirement, checkGhostStatus, isGhostModeSetup from home.tsx
 [x] 10. Added copy-to-clipboard icon for generated PIN with visual feedback
 [x] 11. Server running successfully - all changes deployed
+
+## Ghost Mode DeviceType Fix (Dec 8, 2025)
+[x] 1. Fixed GhostChatAccess model: Added 'unknown' to deviceType enum to handle cases where device detection fails
+[x] 2. Server restarted and running successfully

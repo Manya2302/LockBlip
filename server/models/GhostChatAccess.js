@@ -27,7 +27,8 @@ const ghostChatAccessSchema = new mongoose.Schema({
   
   deviceType: {
     type: String,
-    enum: ['mobile', 'desktop', 'tablet'],
+    enum: ['mobile', 'desktop', 'tablet', 'unknown'],
+    default: 'desktop',
     required: true,
   },
   
