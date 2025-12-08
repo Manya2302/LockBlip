@@ -11,6 +11,7 @@ import MissedCallHistory from "@/pages/MissedCallHistory";
 import VideoCall from "@/components/VideoCall";
 import { useWebRTC } from "@/hooks/useWebRTC";
 import { useMissedCalls } from "@/hooks/useMissedCalls";
+import { useGhostMode } from "@/hooks/useGhostMode";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { User } from "lucide-react";
 import naclUtil from "tweetnacl-util";
@@ -200,6 +201,34 @@ export default function Home({ onLogout }: HomeProps) {
     markCallsAsSeen: resetMissedCalls,
     markCallsAsSeenByType,
   } = useMissedCalls(token, socketRef);
+
+  const {
+    isSetUp: isGhostModeSetup,
+    activateWithPartner,
+    joinWithPin,
+    checkGhostStatus,
+  } = useGhostMode({ socket: socketRef.current });
+
+  const [showGhostSetupDialog, setShowGhostSetupDialog] = useState(false);
+
+  useEffect(() => {
+    if (token) {
+      checkGhostStatus();
+    }
+  }, [token, checkGhostStatus]);
+
+  const handleGhostModeActivate = useCallback(async (partnerId: string, deviceType: string) => {
+    return await activateWithPartner(partnerId, deviceType);
+  }, [activateWithPartner]);
+
+  const handleGhostModeJoin = useCallback(async (pin: string, deviceType: string) => {
+    return await joinWithPin(pin, deviceType);
+  }, [joinWithPin]);
+
+  const handleGhostModeSetupRequired = useCallback(() => {
+    setShowGhostSetupDialog(true);
+    alert('Ghost Mode requires initial setup. Please go to your profile settings to set up Ghost Mode with a PIN.');
+  }, []);
 
   const [pendingOffer, setPendingOffer] = useState<{
     from: string;
@@ -1004,6 +1033,11 @@ export default function Home({ onLogout }: HomeProps) {
               onStartVideoCall={handleStartVideoCall}
               onStartAudioCall={handleStartAudioCall}
               missedCallCounts={activeContact ? getMissedCallCountsForContact(activeContact.name) : { voice: 0, video: 0 }}
+              contactId={activeContact?.id}
+              onGhostModeActivate={handleGhostModeActivate}
+              onGhostModeJoin={handleGhostModeJoin}
+              isGhostModeSetup={isGhostModeSetup}
+              onGhostModeSetupRequired={handleGhostModeSetupRequired}
             />
           ) : activeView === "missedCalls" ? (
             <MissedCallHistory 

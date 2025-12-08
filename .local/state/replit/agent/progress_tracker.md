@@ -39,3 +39,12 @@
 [x] 7. Updated useGhostMode hook with activateWithPartner, joinWithPin, reauthenticate, logSecurityEvent
 [x] 8. Implemented session security: screen blur, auto-lock on idle, PIN re-auth
 [x] 9. All tests passing - server running successfully
+
+## Ghost Mode Button Integration in Chat Header (Dec 8, 2025)
+[x] 1. Added GhostModeButton to ChatWindow header after video call icon
+[x] 2. Removed BlockchainStatus (Block #N display) from chat header
+[x] 3. Integrated useGhostMode hook in home.tsx
+[x] 4. Passed Ghost Mode props (onGhostModeActivate, onGhostModeJoin, isGhostModeSetup, onGhostModeSetupRequired) to ChatWindow
+[x] 5. Added contactId prop to ChatWindow for Ghost Mode partner identification
+[x] 6. Ghost Mode button now visible for all chats with contacts
+[x] 7. Server running successfully - no errors

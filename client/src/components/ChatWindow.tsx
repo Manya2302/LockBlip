@@ -2,12 +2,12 @@ import { useRef, useEffect, useState } from "react";
 import MessageBubble from "./MessageBubble";
 import MessageContextMenu from "./MessageContextMenu";
 import ChatInput from "./ChatInput";
-import BlockchainStatus from "./BlockchainStatus";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Menu, Phone, Video } from "lucide-react";
 import EmptyState from "./EmptyState";
 import emptyChat from '@assets/generated_images/Empty_chat_state_illustration_c6fb06b5.png';
+import { GhostModeButton } from "./ghost/GhostModeButton";
 
 interface Message {
   id: string;
@@ -28,6 +28,7 @@ interface MissedCallCounts {
 
 interface ChatWindowProps {
   contactName?: string;
+  contactId?: string;
   messages: Message[];
   blockCount: number;
   onSendMessage: (message: string) => void;
@@ -48,10 +49,15 @@ interface ChatWindowProps {
   onStartVideoCall?: () => void;
   onStartAudioCall?: () => void;
   missedCallCounts?: MissedCallCounts;
+  onGhostModeActivate?: (partnerId: string, deviceType: string) => Promise<{ pin: string; sessionId: string } | null>;
+  onGhostModeJoin?: (pin: string, deviceType: string) => Promise<boolean>;
+  isGhostModeSetup?: boolean;
+  onGhostModeSetupRequired?: () => void;
 }
 
 export default function ChatWindow({
   contactName,
+  contactId,
   messages,
   blockCount,
   onSendMessage,
@@ -72,6 +78,10 @@ export default function ChatWindow({
   onStartVideoCall,
   onStartAudioCall,
   missedCallCounts = { voice: 0, video: 0 },
+  onGhostModeActivate,
+  onGhostModeJoin,
+  isGhostModeSetup = false,
+  onGhostModeSetupRequired,
 }: ChatWindowProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -202,7 +212,7 @@ export default function ChatWindow({
           >
             <Menu className="h-5 w-5" />
           </Button>
-          <BlockchainStatus blockCount={blockCount} isValid={true} />
+          <span className="text-sm font-medium text-muted-foreground">Select a chat to start messaging</span>
         </div>
         <EmptyState
           image={emptyChat}
@@ -269,7 +279,16 @@ export default function ChatWindow({
               </span>
             )}
           </div>
-          <BlockchainStatus blockCount={blockCount} isValid={true} />
+          {contactId && onGhostModeActivate && onGhostModeJoin && onGhostModeSetupRequired && (
+            <GhostModeButton
+              partnerId={contactId}
+              partnerName={contactName}
+              onActivate={onGhostModeActivate}
+              onJoin={onGhostModeJoin}
+              isGhostModeSetup={isGhostModeSetup}
+              onSetupRequired={onGhostModeSetupRequired}
+            />
+          )}
         </div>
       </div>
 
