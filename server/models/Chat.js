@@ -92,6 +92,36 @@ const chatSchema = new mongoose.Schema({
     get: decryptField,
     set: encryptField,
   },
+  // Self-destruct fields
+  selfDestruct: {
+    type: Boolean,
+    default: false,
+  },
+  autoDeleteTimer: {
+    type: Number,
+    default: null,
+  },
+  viewed: {
+    type: Boolean,
+    default: false,
+  },
+  viewTimestamp: {
+    type: Date,
+    default: null,
+  },
+  playTimestamp: {
+    type: Date,
+    default: null,
+  },
+  deleteAt: {
+    type: Date,
+    default: null,
+    index: true,
+  },
+  isDeleted: {
+    type: Boolean,
+    default: false,
+  },
   // list of usernames for which this message has been deleted (per-user delete)
   deletedFor: {
     type: [String],
@@ -107,8 +137,6 @@ const chatSchema = new mongoose.Schema({
     },
     set: (arr) => {
       if (!arr) return [];
-      // Expect callers to push encrypted values where appropriate, but
-      // allow setting with plaintext array here by encrypting each value.
       try {
         return arr.map(a => typeof a === 'string' ? encryptField(a) : a);
       } catch (err) {

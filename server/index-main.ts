@@ -24,6 +24,11 @@ import connectionsRoutes from './routes/connections.js';
 import chatsRoutes from './routes/chats.js';
 import uploadsRoutes from './routes/uploads.js';
 import missedCallsRoutes from './routes/missedCalls.js';
+import ghostRoutes from './routes/ghost.js';
+import { startDeletionWorker, markMessageViewed, markAudioPlayed } from './services/deletionWorker.js';
+import GhostChatSession, { encryptWithSessionKey, decryptWithSessionKey } from './models/GhostChat.js';
+import GhostMessage from './models/GhostMessage.js';
+import GhostUser from './models/GhostUser.js';
 import { initializeBlockchain, addMessageBlock } from './lib/blockchain.js';
 import MissedCall from './models/MissedCall.js';
 import { authenticateSocket } from './middleware/auth.js';
@@ -91,6 +96,7 @@ app.use('/api/connections', connectionsRoutes);
 app.use('/api/chats', chatsRoutes);
 app.use('/api/uploads', uploadsRoutes);
 app.use('/api/missed-calls', missedCallsRoutes);
+app.use('/api/ghost', ghostRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -704,6 +710,294 @@ io.on('connection', async (socket: AuthenticatedSocket) => {
       console.error('Error getting missed call counts:', err);
     }
   });
+
+  // Self-destruct: Send message with auto-delete timer
+  socket.on('send-self-destruct-message', async (data) => {
+    try {
+      const { to, message, messageType = 'text', mediaUrl = null, autoDeleteTimer = 30 } = data;
+      
+      const areFriends = await Connection.findOne({
+        $or: [
+          { sender: socket.username, receiver: to, status: 'accepted' },
+          { sender: to, receiver: socket.username, status: 'accepted' }
+        ]
+      });
+
+      if (!areFriends) {
+        socket.emit('error', { message: 'You can only message friends' });
+        return;
+      }
+      
+      const chatRoomId = [socket.username, to].sort().join('_');
+      const { encryptedMessage, chatPublicKey, chatPrivateKey } = await encryptMessageWithChatKeys(message, chatRoomId);
+      const previousHash = await getPreviousMessageHash(chatRoomId);
+      const timestamp = new Date();
+      const hash = calculateMessageHash(
+        chatRoomId,
+        socket.username!,
+        to,
+        messageType,
+        encryptedMessage,
+        timestamp.toISOString(),
+        previousHash
+      );
+      
+      const block = await addMessageBlock(socket.username!, to, encryptedMessage);
+      
+      const chatMessage = await Chat.create({
+        senderId: socket.username,
+        receiverId: to,
+        encryptedMessage,
+        chatRoomId,
+        messageType,
+        mediaUrl,
+        metadata: { isSelfDestruct: true },
+        status: 'sent',
+        blockIndex: block.index,
+        hash,
+        previousHash,
+        chatPublicKey,
+        chatPrivateKey,
+        timestamp,
+        selfDestruct: true,
+        autoDeleteTimer,
+      });
+
+      const recipientSocketId = userSockets.get(to);
+      if (recipientSocketId) {
+        const { serverDecrypt } = await import('./lib/chatCrypto.js');
+        const chatEncrypted = serverDecrypt(encryptedMessage);
+        
+        io.to(recipientSocketId).emit('receive-self-destruct-message', {
+          from: socket.username,
+          messageId: chatMessage._id.toString(),
+          encryptedMessage: chatEncrypted,
+          chatPublicKey,
+          chatPrivateKey,
+          hash,
+          previousHash,
+          block: {
+            index: block.index,
+            timestamp: block.timestamp,
+            hash: block.hash,
+            prevHash: block.prevHash,
+            payload: block.payload,
+          },
+          messageType,
+          mediaUrl,
+          autoDeleteTimer,
+          selfDestruct: true,
+        });
+        
+        await Chat.findByIdAndUpdate(chatMessage._id, { status: 'delivered' });
+      }
+
+      socket.emit('message-sent', {
+        messageId: chatMessage._id.toString(),
+        blockNumber: block.index,
+        hash: block.hash,
+        previousHash,
+        timestamp: timestamp.toISOString(),
+        selfDestruct: true,
+        autoDeleteTimer,
+      });
+
+      console.log(`🔥 Self-destruct message sent: ${socket.username} -> ${to} (${autoDeleteTimer}s)`);
+    } catch (error) {
+      console.error('Send self-destruct message error:', error);
+      socket.emit('error', { message: 'Failed to send message' });
+    }
+  });
+
+  // Mark self-destruct message as viewed
+  socket.on('message-viewed', async (data) => {
+    try {
+      const { messageId } = data;
+      
+      const result = await markMessageViewed(messageId, false);
+      if (result) {
+        const message = await Chat.findById(messageId).lean();
+        if (message) {
+          socket.emit('message-view-started', {
+            messageId,
+            viewTimestamp: result.viewTimestamp,
+            deleteAt: result.deleteAt,
+            autoDeleteTimer: result.autoDeleteTimer,
+          });
+          
+          const senderSocketId = userSockets.get((message as any).senderId);
+          if (senderSocketId) {
+            io.to(senderSocketId).emit('message-view-started', {
+              messageId,
+              viewTimestamp: result.viewTimestamp,
+              deleteAt: result.deleteAt,
+              autoDeleteTimer: result.autoDeleteTimer,
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Message viewed error:', error);
+    }
+  });
+
+  // Mark audio as played
+  socket.on('audio-played', async (data) => {
+    try {
+      const { messageId } = data;
+      
+      const result = await markAudioPlayed(messageId);
+      if (result) {
+        const message = await Chat.findById(messageId).lean();
+        if (message) {
+          socket.emit('audio-play-started', {
+            messageId,
+            playTimestamp: result.playTimestamp,
+            deleteAt: result.deleteAt,
+            autoDeleteTimer: result.autoDeleteTimer,
+          });
+          
+          const senderSocketId = userSockets.get((message as any).senderId);
+          if (senderSocketId) {
+            io.to(senderSocketId).emit('audio-play-started', {
+              messageId,
+              playTimestamp: result.playTimestamp,
+              deleteAt: result.deleteAt,
+              autoDeleteTimer: result.autoDeleteTimer,
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Audio played error:', error);
+    }
+  });
+
+  // Screenshot detection alert
+  socket.on('screenshot-detected', async (data) => {
+    try {
+      const { chatRoomId } = data;
+      const [user1, user2] = chatRoomId.split('_');
+      const otherUser = user1 === socket.username ? user2 : user1;
+      
+      const otherSocketId = userSockets.get(otherUser);
+      if (otherSocketId) {
+        io.to(otherSocketId).emit('screenshot-alert', {
+          from: socket.username,
+          chatRoomId,
+          timestamp: new Date(),
+        });
+      }
+      
+      console.log(`📸 Screenshot detected by ${socket.username} in chat ${chatRoomId}`);
+    } catch (error) {
+      console.error('Screenshot detection error:', error);
+    }
+  });
+
+  // Ghost mode messaging
+  socket.on('ghost-send-message', async (data) => {
+    try {
+      const { sessionToken, sessionId, message, messageType = 'text' } = data;
+      
+      const ghostUser = await GhostUser.findOne({ username: socket.username });
+      if (!ghostUser || ghostUser.ghostSessionToken !== sessionToken) {
+        socket.emit('ghost-error', { message: 'Invalid ghost session' });
+        return;
+      }
+      
+      const session = await GhostChatSession.findOne({ sessionId, isActive: true });
+      if (!session || !session.participants.includes(socket.username!)) {
+        socket.emit('ghost-error', { message: 'Invalid session' });
+        return;
+      }
+      
+      const receiverId = session.participants.find(p => p !== socket.username);
+      const encryptedPayload = encryptWithSessionKey(message, session.sessionKey);
+      const expireAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      
+      const ghostMessage = await GhostMessage.create({
+        sessionId,
+        senderId: socket.username,
+        receiverId,
+        encryptedPayload,
+        messageType,
+        autoDeleteTimer: 30,
+        expireAt,
+      });
+      
+      await GhostChatSession.findByIdAndUpdate(session._id, { lastActivity: new Date() });
+      
+      const recipientSocketId = userSockets.get(receiverId!);
+      if (recipientSocketId) {
+        io.to(recipientSocketId).emit('ghost-receive-message', {
+          messageId: ghostMessage._id.toString(),
+          sessionId,
+          senderId: socket.username,
+          content: message,
+          messageType,
+          autoDeleteTimer: 30,
+          timestamp: ghostMessage.timestamp,
+        });
+      }
+      
+      socket.emit('ghost-message-sent', {
+        messageId: ghostMessage._id.toString(),
+        sessionId,
+        timestamp: ghostMessage.timestamp,
+      });
+      
+      console.log(`👻 Ghost message sent: ${socket.username} -> ${receiverId}`);
+    } catch (error) {
+      console.error('Ghost send message error:', error);
+      socket.emit('ghost-error', { message: 'Failed to send ghost message' });
+    }
+  });
+
+  // Ghost message viewed
+  socket.on('ghost-message-viewed', async (data) => {
+    try {
+      const { sessionToken, messageId } = data;
+      
+      const ghostUser = await GhostUser.findOne({ username: socket.username });
+      if (!ghostUser || ghostUser.ghostSessionToken !== sessionToken) {
+        return;
+      }
+      
+      const message = await GhostMessage.findById(messageId);
+      if (!message || message.receiverId !== socket.username || message.viewed) {
+        return;
+      }
+      
+      const viewTimestamp = new Date();
+      const deleteAt = new Date(viewTimestamp.getTime() + message.autoDeleteTimer * 1000);
+      
+      await GhostMessage.findByIdAndUpdate(messageId, {
+        viewed: true,
+        viewTimestamp,
+        deleteAt,
+      });
+      
+      const senderSocketId = userSockets.get(message.senderId);
+      if (senderSocketId) {
+        io.to(senderSocketId).emit('ghost-message-view-started', {
+          messageId,
+          viewTimestamp,
+          deleteAt,
+          autoDeleteTimer: message.autoDeleteTimer,
+        });
+      }
+      
+      socket.emit('ghost-message-view-started', {
+        messageId,
+        viewTimestamp,
+        deleteAt,
+        autoDeleteTimer: message.autoDeleteTimer,
+      });
+    } catch (error) {
+      console.error('Ghost message viewed error:', error);
+    }
+  });
 });
 
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
@@ -721,6 +1015,9 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     
     await initializeBlockchain();
     console.log('✓ Blockchain initialized');
+    
+    startDeletionWorker(io, userSockets);
+    console.log('✓ Deletion worker started');
   } catch (err) {
     console.error('Database initialization error:', err);
     process.exit(1);
