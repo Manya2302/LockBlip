@@ -1012,14 +1012,6 @@ io.on('connection', async (socket: AuthenticatedSocket) => {
       
       const chatRoomId = [socket.username, partnerId].sort().join('_');
       
-      const senderKeys = await getChatKeys(socket.username, partnerId);
-      const receiverKeys = await getChatKeys(partnerId, socket.username);
-      
-      if (!senderKeys || !receiverKeys) {
-        console.log('Ghost activation: Could not get chat keys for notification');
-        return;
-      }
-      
       const previousHash = await getPreviousMessageHash(chatRoomId);
       const hash = calculateMessageHash({
         senderId: 'LockBlip',
@@ -1028,19 +1020,23 @@ io.on('connection', async (socket: AuthenticatedSocket) => {
         previousHash,
       });
       
-      const encryptedForSender = encryptMessageWithChatKeys(notificationMessage, senderKeys.chatPublicKey);
-      const encryptedForReceiver = encryptMessageWithChatKeys(notificationMessage, receiverKeys.chatPublicKey);
+      const { encryptedMessage, chatPublicKey, chatPrivateKey } = await encryptMessageWithChatKeys(notificationMessage, chatRoomId);
+      
+      const block = await addMessageBlock('LockBlip', partnerId, encryptedMessage);
       
       const chatMessage = await Chat.create({
         chatRoomId,
         senderId: 'LockBlip',
         receiverId: partnerId,
-        encryptedForSender,
-        encryptedForReceiver,
+        encryptedMessage,
         hash,
         previousHash,
-        isSystem: true,
         messageType: 'text',
+        status: 'delivered',
+        blockIndex: block.index,
+        chatPublicKey,
+        chatPrivateKey,
+        metadata: { isSystemMessage: true, isGhostModeNotification: true },
       });
       
       const recipientSocketId = userSockets.get(partnerId);
@@ -1059,7 +1055,9 @@ io.on('connection', async (socket: AuthenticatedSocket) => {
           content: notificationMessage,
           chatRoomId,
           timestamp: chatMessage.timestamp,
-          isSystem: true,
+          encryptedMessage,
+          chatPublicKey,
+          chatPrivateKey,
         });
       }
       
@@ -1070,7 +1068,9 @@ io.on('connection', async (socket: AuthenticatedSocket) => {
         content: notificationMessage,
         chatRoomId,
         timestamp: chatMessage.timestamp,
-        isSystem: true,
+        encryptedMessage,
+        chatPublicKey,
+        chatPrivateKey,
       });
       
       console.log(`👻 Ghost mode activation notification sent: ${socket.username} -> ${partnerId}`);

@@ -65,3 +65,10 @@
 ## Ghost Mode DeviceType Fix (Dec 8, 2025)
 [x] 1. Fixed GhostChatAccess model: Added 'unknown' to deviceType enum to handle cases where device detection fails
 [x] 2. Server restarted and running successfully
+
+## Ghost Mode Activation Message Fix (Dec 8, 2025)
+[x] 1. Fixed ghost-mode-activated socket handler to use correct encryption pattern
+[x] 2. Changed from incorrect encryptedForSender/encryptedForReceiver to proper encryptedMessage field
+[x] 3. Added proper message block creation with addMessageBlock function
+[x] 4. Included chatPublicKey and chatPrivateKey for proper message decryption
+[x] 5. Server running successfully - Ghost Mode activation should now work
