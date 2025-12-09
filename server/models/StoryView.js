@@ -27,7 +27,7 @@ const storyViewSchema = new mongoose.Schema({
   toObject: { getters: true },
 });
 
-storyViewSchema.index({ storyId: 1, viewerId: 1 }, { unique: true });
 storyViewSchema.index({ storyId: 1, viewedAt: -1 });
+storyViewSchema.index({ storyId: 1, viewerId: 1 });
 
 export default mongoose.model('StoryView', storyViewSchema);

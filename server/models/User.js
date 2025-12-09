@@ -70,6 +70,11 @@ const userSchema = new mongoose.Schema({
     enum: ['light', 'dark'],
     default: 'dark',
   },
+  closeFriendsList: [{
+    type: String,
+    set: encryptField,
+    get: decryptField,
+  }],
   createdAt: {
     type: Date,
     default: Date.now,

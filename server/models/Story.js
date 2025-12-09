@@ -30,6 +30,25 @@ const storySchema = new mongoose.Schema({
     type: String,
     default: '',
   },
+  visibilityType: {
+    type: String,
+    enum: ['everyone', 'hide_from', 'only_selected'],
+    default: 'everyone',
+  },
+  allowedViewers: [{
+    type: String,
+    set: encryptField,
+    get: decryptField,
+  }],
+  hiddenFromViewers: [{
+    type: String,
+    set: encryptField,
+    get: decryptField,
+  }],
+  closeFriendsOnly: {
+    type: Boolean,
+    default: false,
+  },
   createdAt: {
     type: Date,
     default: Date.now,
