@@ -136,8 +136,6 @@ router.get('/contacts', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    console.log(`📋 Fetching contacts for user: ${user.username}`);
-
     const connections = await Connection.find({
       $or: [
         { sender: user.username, status: 'accepted' },
@@ -145,19 +143,12 @@ router.get('/contacts', authenticateToken, async (req, res) => {
       ]
     }).lean();
 
-    console.log(`🔗 Found ${connections.length} accepted connections`);
-    console.log('Connections:', connections.map(c => `${c.sender} -> ${c.receiver} (${c.status})`));
-
     const friendUsernames = connections.map(conn => 
       conn.sender === user.username ? conn.receiver : conn.sender
     );
 
-    console.log(`👥 Friend usernames:`, friendUsernames);
-
     const allUsers = await User.find({});
     const friendUsers = allUsers.filter(u => friendUsernames.includes(u.username));
-
-    console.log(`📇 Found ${friendUsers.length} friend users in database`);
 
     const contacts = await Promise.all(friendUsers.map(async (friendUser) => {
       const chatRoomId = [user.username, friendUser.username].sort().join('_');
@@ -207,8 +198,6 @@ router.get('/contacts', authenticateToken, async (req, res) => {
       if (!b.lastMessageTime) return -1;
       return new Date(b.lastMessageTime) - new Date(a.lastMessageTime);
     });
-
-    console.log(`✅ Returning ${contacts.length} contacts sorted by last message time`);
 
     res.json(contacts);
   } catch (error) {

@@ -87,3 +87,11 @@
 [x] 5. Verified stories are grouped by owner_id for carousel display
 [x] 6. Verified POST /api/stories correctly populates allowedViewers/hiddenFromViewers based on privacy option
 [x] 7. Server restarted and running successfully on port 5000
+
+## Contacts Not Loading Fix (Dec 9, 2025)
+[x] 1. Diagnosed issue: API requests were using cookies with sameSite='strict' which don't work in Replit's proxy environment
+[x] 2. Fixed queryClient.ts to include Authorization header with Bearer token from localStorage
+[x] 3. Verified /api/users/contacts endpoint now receives token and returns contacts successfully
+[x] 4. Confirmed user "manya" has 2 contacts: "user" and "hatake" returned by the API
+[x] 5. Cleaned up diagnostic logging from users.js
+[x] 6. Server restarted and running successfully
