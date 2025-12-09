@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useLocation } from 'wouter';
 import { Ghost, Lock, Unlock, Eye, EyeOff, Copy, Check, AlertTriangle, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -54,10 +55,12 @@ export function GhostModeButton({
   onEnterGhostMode,
   className = '',
 }: GhostModeButtonProps) {
+  const [, setLocation] = useLocation();
   const [isOpen, setIsOpen] = useState(false);
   const [mode, setMode] = useState<'loading' | 'choose' | 'disclaimer' | 'success' | 'join'>('loading');
   const [pin, setPin] = useState('');
   const [generatedPin, setGeneratedPin] = useState('');
+  const [generatedSessionId, setGeneratedSessionId] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showPin, setShowPin] = useState(false);
@@ -91,6 +94,7 @@ export function GhostModeButton({
       
       if (result) {
         setGeneratedPin(result.pin);
+        setGeneratedSessionId(result.sessionId);
         setMode('success');
         
         if (onSendMessage) {
@@ -120,14 +124,22 @@ export function GhostModeButton({
     
     try {
       const deviceType = detectDeviceType();
-      const success = await onJoin(pin, deviceType);
+      const response = await fetch('/api/ghost/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ pin, deviceType }),
+      });
       
-      if (success) {
+      const data = await response.json();
+      
+      if (data.success && data.sessionId) {
         setIsOpen(false);
         resetState();
         onEnterGhostMode?.();
+        setLocation(`/ghost/${data.sessionId}`);
       } else {
-        setError('Invalid PIN or expired invitation');
+        setError(data.error || 'Invalid PIN or expired invitation');
       }
     } catch (err: any) {
       setError(err.message || 'Failed to join');
@@ -140,6 +152,7 @@ export function GhostModeButton({
     setMode('loading');
     setPin('');
     setGeneratedPin('');
+    setGeneratedSessionId('');
     setError('');
     setShowPin(false);
     setDisclaimerAgreed(false);
@@ -174,24 +187,27 @@ export function GhostModeButton({
   };
 
   const handleDirectEnter = async () => {
-    if (!onDirectEnter) {
-      setError('Direct enter not available');
-      return;
-    }
-    
     setLoading(true);
     setError('');
     
     try {
       const deviceType = detectDeviceType();
-      const result = await onDirectEnter(partnerId, deviceType);
+      const response = await fetch('/api/ghost/direct-enter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ partnerId, deviceType }),
+      });
       
-      if (result) {
+      const data = await response.json();
+      
+      if (data.success && data.sessionId) {
         setIsOpen(false);
         resetState();
         onEnterGhostMode?.();
+        setLocation(`/ghost/${data.sessionId}`);
       } else {
-        setError('Failed to enter Ghost Mode');
+        setError(data.error || 'Failed to enter Ghost Mode');
       }
     } catch (err: any) {
       setError(err.message || 'Failed to enter Ghost Mode');
@@ -459,10 +475,15 @@ export function GhostModeButton({
                 </p>
               </div>
               <Button
-                onClick={() => setIsOpen(false)}
+                onClick={() => {
+                  setIsOpen(false);
+                  if (generatedSessionId) {
+                    setLocation(`/ghost/${generatedSessionId}`);
+                  }
+                }}
                 className="w-full bg-purple-600 hover:bg-purple-700"
               >
-                Done
+                Enter Ghost Chat
               </Button>
             </div>
           )}

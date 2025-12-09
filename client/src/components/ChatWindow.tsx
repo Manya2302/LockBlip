@@ -1,13 +1,15 @@
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState, useCallback } from "react";
+import { useLocation } from "wouter";
 import MessageBubble from "./MessageBubble";
 import MessageContextMenu from "./MessageContextMenu";
 import ChatInput from "./ChatInput";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Menu, Phone, Video } from "lucide-react";
+import { Menu, Phone, Video, Ghost, Lock } from "lucide-react";
 import EmptyState from "./EmptyState";
 import emptyChat from '@assets/generated_images/Empty_chat_state_illustration_c6fb06b5.png';
 import { GhostModeButton } from "./ghost/GhostModeButton";
+import GhostPinJoinForm from "./GhostPinJoinForm";
 
 interface Message {
   id: string;
@@ -85,6 +87,7 @@ export default function ChatWindow({
   onGhostModeDirectEnter,
   onEnterGhostMode,
 }: ChatWindowProps) {
+  const [, setLocation] = useLocation();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; messageId: string } | null>(null);
@@ -92,10 +95,68 @@ export default function ChatWindow({
   const [deleteModal, setDeleteModal] = useState<{ show: boolean; messageId?: string; deleteForBoth: boolean }>({ show: false, messageId: undefined, deleteForBoth: true });
   const [forwardModal, setForwardModal] = useState<{ show: boolean; messageIds: string[] }>({ show: false, messageIds: [] });
   const [forwardRecipients, setForwardRecipients] = useState<Set<string>>(new Set());
+  const [ghostStatus, setGhostStatus] = useState<{
+    hasSession: boolean;
+    sessionId: string | null;
+    ghostEnabled: boolean;
+    canEnterDirectly: boolean;
+    needsPin: boolean;
+  } | null>(null);
+  const [showJoinForm, setShowJoinForm] = useState(false);
+  const ghostCheckDoneRef = useRef<string | null>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    const checkGhostStatus = async () => {
+      if (!contactName || ghostCheckDoneRef.current === contactName) return;
+      
+      try {
+        const response = await fetch(`/api/ghost/session-status/${contactName}`, {
+          credentials: 'include',
+        });
+        
+        if (response.ok) {
+          const status = await response.json();
+          setGhostStatus(status);
+          ghostCheckDoneRef.current = contactName;
+          
+          if (status.ghostEnabled && status.canEnterDirectly && status.sessionId) {
+            console.log('👻 Auto-redirecting to Ghost Mode...');
+            setLocation(`/ghost/${status.sessionId}`);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to check ghost status:', err);
+      }
+    };
+    
+    checkGhostStatus();
+  }, [contactName, setLocation]);
+
+  const handleGhostJoin = useCallback(async (pin: string): Promise<{ success: boolean; sessionId?: string; error?: string }> => {
+    try {
+      const response = await fetch('/api/ghost/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ pin, deviceType: 'desktop' }),
+      });
+      
+      const data = await response.json();
+      
+      if (data.success && data.sessionId) {
+        setLocation(`/ghost/${data.sessionId}`);
+        return { success: true, sessionId: data.sessionId };
+      }
+      
+      return { success: false, error: data.error || 'Invalid PIN' };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Failed to join' };
+    }
+  }, [setLocation]);
 
   const handleContextMenu = (e: React.MouseEvent, messageId: string) => {
     e.preventDefault();
@@ -296,6 +357,26 @@ export default function ChatWindow({
         </div>
       </div>
 
+      {/* Ghost Mode pending banner - partner needs to enter PIN */}
+      {ghostStatus?.needsPin && (
+        <div className="bg-gradient-to-r from-purple-900/80 to-pink-900/80 px-4 py-3 flex items-center justify-between border-b border-purple-500/30">
+          <div className="flex items-center gap-3">
+            <Ghost className="w-5 h-5 text-purple-400" />
+            <div>
+              <p className="text-sm text-white font-medium">Ghost Mode Invitation Pending</p>
+              <p className="text-xs text-purple-300">{contactName} has invited you to a secret chat</p>
+            </div>
+          </div>
+          <Button
+            onClick={() => setShowJoinForm(true)}
+            className="bg-purple-600 hover:bg-purple-700 text-white text-sm"
+          >
+            <Lock className="w-4 h-4 mr-2" />
+            Enter PIN
+          </Button>
+        </div>
+      )}
+
       {/* Selection toolbar (left-top) when messages are selected */}
       {selectedIds.size > 0 && (
         <div className="absolute top-4 left-4 z-40 bg-white/90 dark:bg-card rounded-md shadow px-3 py-2 flex items-center gap-2">
@@ -304,6 +385,14 @@ export default function ChatWindow({
           <button className="px-3 py-1 text-sm" onClick={() => setSelectedIds(new Set())}>Cancel</button>
         </div>
       )}
+
+      {/* Ghost PIN Join Form Dialog */}
+      <GhostPinJoinForm
+        isOpen={showJoinForm}
+        onClose={() => setShowJoinForm(false)}
+        onJoin={handleGhostJoin}
+        partnerName={contactName || ''}
+      />
 
       <div className="flex-1 overflow-y-auto p-4" ref={messagesContainerRef} onScroll={handleScroll}>
         {messages.length === 0 ? (

@@ -895,19 +895,109 @@ io.on('connection', async (socket: AuthenticatedSocket) => {
     }
   });
 
-  // Ghost mode messaging
-  socket.on('ghost-send-message', async (data) => {
+  // Ghost mode room management
+  socket.on('ghost-join-room', async (data) => {
     try {
-      const { sessionToken, sessionId, message, messageType = 'text' } = data;
+      const { sessionId } = data;
       
-      const ghostUser = await GhostUser.findOne({ username: socket.username });
-      if (!ghostUser || ghostUser.ghostSessionToken !== sessionToken) {
-        socket.emit('ghost-error', { message: 'Invalid ghost session' });
+      if (!socket.username || !sessionId) {
+        socket.emit('ghost-error', { message: 'Invalid request' });
         return;
       }
       
       const session = await GhostChatSession.findOne({ sessionId, isActive: true });
-      if (!session || !session.participants.includes(socket.username!)) {
+      if (!session || !session.participants.includes(socket.username)) {
+        socket.emit('ghost-error', { message: 'Not authorized for this session' });
+        return;
+      }
+      
+      // Join the ghost room
+      socket.join(`ghost-${sessionId}`);
+      console.log(`👻 ${socket.username} joined ghost room: ghost-${sessionId}`);
+      
+      // Notify the partner that user joined
+      const partnerId = session.participants.find(p => p !== socket.username);
+      const partnerSocketId = userSockets.get(partnerId!);
+      if (partnerSocketId) {
+        io.to(partnerSocketId).emit('ghost-partner-joined', {
+          sessionId,
+          partnerId: socket.username,
+        });
+      }
+      
+      socket.emit('ghost-room-joined', { sessionId });
+    } catch (error) {
+      console.error('Ghost join room error:', error);
+      socket.emit('ghost-error', { message: 'Failed to join ghost room' });
+    }
+  });
+
+  socket.on('ghost-leave-room', async (data) => {
+    try {
+      const { sessionId } = data;
+      
+      if (!socket.username || !sessionId) {
+        return;
+      }
+      
+      socket.leave(`ghost-${sessionId}`);
+      console.log(`👻 ${socket.username} left ghost room: ghost-${sessionId}`);
+      
+      // Notify the partner that user left
+      const session = await GhostChatSession.findOne({ sessionId });
+      if (session) {
+        const partnerId = session.participants.find(p => p !== socket.username);
+        const partnerSocketId = userSockets.get(partnerId!);
+        if (partnerSocketId) {
+          io.to(partnerSocketId).emit('ghost-partner-left', {
+            sessionId,
+            partnerId: socket.username,
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Ghost leave room error:', error);
+    }
+  });
+
+  socket.on('ghost-session-terminate', async (data) => {
+    try {
+      const { sessionId } = data;
+      
+      if (!socket.username || !sessionId) {
+        return;
+      }
+      
+      const session = await GhostChatSession.findOne({ sessionId });
+      if (!session || !session.participants.includes(socket.username)) {
+        return;
+      }
+      
+      // Notify all users in the ghost room
+      io.to(`ghost-${sessionId}`).emit('ghost-session-terminated', {
+        sessionId,
+        terminatedBy: socket.username,
+      });
+      
+      console.log(`👻 Ghost session ${sessionId} terminated by ${socket.username}`);
+    } catch (error) {
+      console.error('Ghost session terminate error:', error);
+    }
+  });
+
+  // Ghost mode messaging
+  socket.on('ghost-send-message', async (data) => {
+    try {
+      const { sessionId, message, messageType = 'text' } = data;
+      
+      if (!socket.username || !sessionId) {
+        socket.emit('ghost-error', { message: 'Invalid request' });
+        return;
+      }
+      
+      // Verify user is participant of the session (session-based auth for dedicated ghost page)
+      const session = await GhostChatSession.findOne({ sessionId, isActive: true });
+      if (!session || !session.participants.includes(socket.username)) {
         socket.emit('ghost-error', { message: 'Invalid session' });
         return;
       }
@@ -957,15 +1047,20 @@ io.on('connection', async (socket: AuthenticatedSocket) => {
   // Ghost message viewed
   socket.on('ghost-message-viewed', async (data) => {
     try {
-      const { sessionToken, messageId } = data;
+      const { messageId } = data;
       
-      const ghostUser = await GhostUser.findOne({ username: socket.username });
-      if (!ghostUser || ghostUser.ghostSessionToken !== sessionToken) {
+      if (!socket.username || !messageId) {
         return;
       }
       
       const message = await GhostMessage.findById(messageId);
       if (!message || message.receiverId !== socket.username || message.viewed) {
+        return;
+      }
+      
+      // Verify user is participant of the session
+      const session = await GhostChatSession.findOne({ sessionId: message.sessionId, isActive: true });
+      if (!session || !session.participants.includes(socket.username)) {
         return;
       }
       

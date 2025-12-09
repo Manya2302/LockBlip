@@ -267,14 +267,10 @@ router.get('/sessions', authenticateToken, async (req, res) => {
 
 router.post('/messages', authenticateToken, async (req, res) => {
   try {
-    const { sessionToken, sessionId, message, messageType = 'text', mediaUrl } = req.body;
+    const { sessionId, message, messageType = 'text', mediaUrl } = req.body;
     const username = req.user.username;
     
-    const ghostUser = await GhostUser.findOne({ username });
-    if (!ghostUser || ghostUser.ghostSessionToken !== sessionToken) {
-      return res.status(401).json({ error: 'Invalid session' });
-    }
-    
+    // Session-based authentication: verify user is participant of the active session
     const session = await GhostChatSession.findOne({ sessionId, isActive: true });
     if (!session) {
       return res.status(404).json({ error: 'Session not found' });
@@ -325,15 +321,10 @@ router.post('/messages', authenticateToken, async (req, res) => {
 
 router.get('/messages/:sessionId', authenticateToken, async (req, res) => {
   try {
-    const { sessionToken } = req.query;
     const { sessionId } = req.params;
     const username = req.user.username;
     
-    const ghostUser = await GhostUser.findOne({ username });
-    if (!ghostUser || ghostUser.ghostSessionToken !== sessionToken) {
-      return res.status(401).json({ error: 'Invalid session' });
-    }
-    
+    // Session-based authentication: verify user is participant of the active session
     const session = await GhostChatSession.findOne({ sessionId, isActive: true });
     if (!session) {
       return res.status(404).json({ error: 'Session not found' });
@@ -371,14 +362,8 @@ router.get('/messages/:sessionId', authenticateToken, async (req, res) => {
 
 router.post('/messages/:messageId/view', authenticateToken, async (req, res) => {
   try {
-    const { sessionToken } = req.body;
     const { messageId } = req.params;
     const username = req.user.username;
-    
-    const ghostUser = await GhostUser.findOne({ username });
-    if (!ghostUser || ghostUser.ghostSessionToken !== sessionToken) {
-      return res.status(401).json({ error: 'Invalid session' });
-    }
     
     const message = await GhostMessage.findById(messageId);
     if (!message) {
@@ -387,6 +372,12 @@ router.post('/messages/:messageId/view', authenticateToken, async (req, res) => 
     
     if (message.receiverId !== username) {
       return res.status(403).json({ error: 'Not the recipient' });
+    }
+    
+    // Verify user is participant of the session
+    const session = await GhostChatSession.findOne({ sessionId: message.sessionId, isActive: true });
+    if (!session || !session.participants.includes(username)) {
+      return res.status(403).json({ error: 'Not a participant' });
     }
     
     if (message.viewed) {

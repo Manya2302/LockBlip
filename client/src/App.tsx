@@ -10,6 +10,7 @@ import Home from "@/pages/home";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
 import LandingPage from "@/pages/LandingPage";
+import GhostChatPage from "@/pages/GhostChatPage";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -151,6 +152,14 @@ function Router() {
           <Redirect to="/home" />
         ) : (
           <Register onAuthenticated={handleAuthenticated} />
+        )}
+      </Route>
+
+      <Route path="/ghost/:sessionId">
+        {isAuthenticated ? (
+          <GhostChatPage />
+        ) : (
+          <Redirect to="/" />
         )}
       </Route>
       
