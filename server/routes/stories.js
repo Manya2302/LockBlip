@@ -82,13 +82,26 @@ router.get('/', authenticateToken, async (req, res) => {
       conn.sender === currentUser.username ? conn.receiver : conn.sender
     );
 
+    // Since username is encrypted in the User model, we need to fetch all users
+    // and manually decrypt usernames to get friend user IDs
+    const allUsers = await User.find({});
+    const friendUserIds = allUsers
+      .filter(u => friendUsernames.includes(u.username))
+      .map(u => u._id);
+
+    console.log('📸 Stories: Current user:', currentUser.username);
+    console.log('📸 Stories: Friend usernames:', friendUsernames);
+    console.log('📸 Stories: Friend user IDs:', friendUserIds);
+
     const stories = await Story.find({
       expiresAt: { $gt: currentTime },
       $or: [
         { userId: req.user.id },
-        { username: { $in: friendUsernames } }
+        { userId: { $in: friendUserIds } }
       ]
     }).sort({ createdAt: -1 });
+
+    console.log('📸 Stories: Found', stories.length, 'stories');
 
     const storyOwnerIds = [...new Set(stories.map(s => s.userId.toString()))];
     const storyOwners = await User.find({ _id: { $in: storyOwnerIds } });

@@ -354,34 +354,46 @@ export default function Home({ onLogout }: HomeProps) {
     socket.on('receive-message', async (data) => {
       const { from, block, messageId, messageType = 'text', mediaUrl, metadata, encryptedMessage, chatPublicKey, chatPrivateKey } = data;
       
+      console.log('📨 Received message from:', from);
+      console.log('📨 Current active contact:', activeContactNameRef.current);
+      
       try {
-        const decryptedContent = await decryptMessageWithChatKeys(encryptedMessage, chatPublicKey, chatPrivateKey);
-        const newMessage: Message = {
-          id: messageId,
-          content: decryptedContent,
-          timestamp: new Date(block.timestamp).toLocaleTimeString("en-US", {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
-          isSender: false,
-          blockNumber: block.index,
-          status: 'delivered',
-          messageType,
-          metadata,
-          mediaUrl,
-        };
+        // Only add message to UI if it's from the currently active contact
+        if (from === activeContactNameRef.current) {
+          const decryptedContent = await decryptMessageWithChatKeys(encryptedMessage, chatPublicKey, chatPrivateKey);
+          const newMessage: Message = {
+            id: messageId,
+            content: decryptedContent,
+            timestamp: new Date(block.timestamp).toLocaleTimeString("en-US", {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+            isSender: false,
+            blockNumber: block.index,
+            status: 'delivered',
+            messageType,
+            metadata,
+            mediaUrl,
+          };
 
-        setMessages((prev) => [...prev, newMessage]);
-        refetchBlockchain();
-        
-        const senderContact = contacts.find(c => c.name === from);
-        if (activeContactId === senderContact?.id && activeView === 'chat') {
+          setMessages((prev) => [...prev, newMessage]);
+          refetchBlockchain();
+          
+          // Mark as seen since we're viewing this chat
           socket.emit('message-seen', { messageId, from });
           try {
             refetchContacts();
             console.log('🔁 Refetched contacts after marking single message seen');
           } catch (err) {
             console.warn('Failed to refetch contacts after marking single message seen', err);
+          }
+        } else {
+          // Message from a different contact - just refresh the contact list to update unread counts
+          console.log('📨 Message from different contact, refreshing contact list');
+          try {
+            refetchContacts();
+          } catch (err) {
+            console.warn('Failed to refetch contacts', err);
           }
         }
       } catch (error) {
@@ -469,9 +481,11 @@ export default function Home({ onLogout }: HomeProps) {
       setIsLoadingMessages(true);
       
       try {
+        const token = localStorage.getItem('token');
         const response = await fetch(`/api/chats/messages/${activeContact.name}?page=1&limit=50`, {
           headers: {
             'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
           },
           credentials: 'include',
         });
@@ -649,9 +663,11 @@ export default function Home({ onLogout }: HomeProps) {
     const nextPage = currentPage + 1;
     
     try {
+      const token = localStorage.getItem('token');
       const response = await fetch(`/api/chats/messages/${activeContact.name}?page=${nextPage}&limit=50`, {
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
         credentials: 'include',
       });
