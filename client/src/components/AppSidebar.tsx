@@ -1,4 +1,4 @@
-import { Search, Plus, PhoneMissed, LogOut, User, X, Bell } from "lucide-react";
+import { Search, Plus, PhoneMissed, LogOut, User, X, Bell, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import ContactItem from "./ContactItem";
 import UserProfilePreview from "./UserProfilePreview";
 import FriendRequests from "./FriendRequests";
+import CloseFriendsSettings from "./CloseFriendsSettings";
 import ThemeToggle from "./ThemeToggle";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -55,6 +56,7 @@ export default function AppSidebar({
   const [isSearchMode, setIsSearchMode] = useState(false);
   const [selectedUser, setSelectedUser] = useState<SearchResult | null>(null);
   const [showFriendRequests, setShowFriendRequests] = useState(false);
+  const [showCloseFriends, setShowCloseFriends] = useState(false);
   
   const user = JSON.parse(localStorage.getItem('user') || '{}');
 
@@ -204,6 +206,15 @@ export default function AppSidebar({
           <Button
             variant="outline"
             className="w-full justify-start gap-2"
+            onClick={() => setShowCloseFriends(true)}
+            data-testid="button-close-friends"
+          >
+            <Star className="h-4 w-4 text-green-400" />
+            Close Friends
+          </Button>
+          <Button
+            variant="outline"
+            className="w-full justify-start gap-2"
             onClick={onLogout}
             data-testid="button-logout"
           >
@@ -241,6 +252,11 @@ export default function AppSidebar({
         open={showFriendRequests}
         onClose={() => setShowFriendRequests(false)}
         username={user.username}
+      />
+      
+      <CloseFriendsSettings
+        open={showCloseFriends}
+        onClose={() => setShowCloseFriends(false)}
       />
     </>
   );

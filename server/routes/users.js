@@ -3,9 +3,131 @@ import User from '../models/User.js';
 import Connection from '../models/Connection.js';
 import Chat from '../models/Chat.js';
 import { authenticateToken } from '../middleware/auth.js';
-import { decryptField } from '../lib/encryption.js';
+import { decryptField, encryptField } from '../lib/encryption.js';
 
 const router = express.Router();
+
+router.get('/close-friends', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const closeFriends = (user.closeFriendsList || []).map(encrypted => {
+      try {
+        return decryptField(encrypted);
+      } catch {
+        return null;
+      }
+    }).filter(Boolean);
+
+    res.json({ closeFriends });
+  } catch (error) {
+    console.error('Get close friends error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.put('/close-friends', authenticateToken, async (req, res) => {
+  try {
+    const { closeFriends } = req.body;
+
+    if (!Array.isArray(closeFriends)) {
+      return res.status(400).json({ error: 'closeFriends must be an array of usernames' });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const encryptedCloseFriends = closeFriends.map(username => encryptField(username));
+    user.closeFriendsList = encryptedCloseFriends;
+    await user.save();
+
+    res.json({ 
+      success: true, 
+      closeFriends 
+    });
+  } catch (error) {
+    console.error('Update close friends error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/close-friends/add', authenticateToken, async (req, res) => {
+  try {
+    const { username } = req.body;
+
+    if (!username) {
+      return res.status(400).json({ error: 'Username is required' });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const existingCloseFriends = (user.closeFriendsList || []).map(encrypted => {
+      try {
+        return decryptField(encrypted);
+      } catch {
+        return null;
+      }
+    }).filter(Boolean);
+
+    if (existingCloseFriends.includes(username)) {
+      return res.status(400).json({ error: 'User is already a close friend' });
+    }
+
+    user.closeFriendsList = [...(user.closeFriendsList || []), encryptField(username)];
+    await user.save();
+
+    res.json({ 
+      success: true, 
+      closeFriends: [...existingCloseFriends, username]
+    });
+  } catch (error) {
+    console.error('Add close friend error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/close-friends/remove', authenticateToken, async (req, res) => {
+  try {
+    const { username } = req.body;
+
+    if (!username) {
+      return res.status(400).json({ error: 'Username is required' });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const existingCloseFriends = (user.closeFriendsList || []).map(encrypted => {
+      try {
+        return decryptField(encrypted);
+      } catch {
+        return null;
+      }
+    }).filter(Boolean);
+
+    const updatedCloseFriends = existingCloseFriends.filter(u => u !== username);
+    user.closeFriendsList = updatedCloseFriends.map(u => encryptField(u));
+    await user.save();
+
+    res.json({ 
+      success: true, 
+      closeFriends: updatedCloseFriends
+    });
+  } catch (error) {
+    console.error('Remove close friend error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 
 router.get('/contacts', authenticateToken, async (req, res) => {
   try {
