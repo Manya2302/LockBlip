@@ -10,6 +10,8 @@ import EmptyState from "./EmptyState";
 import emptyChat from '@assets/generated_images/Empty_chat_state_illustration_c6fb06b5.png';
 import { GhostModeButton } from "./ghost/GhostModeButton";
 import GhostPinJoinForm from "./GhostPinJoinForm";
+import { AISummaryCard, AISummarizeButton } from "./chat/AISummaryCard";
+import { LiveLocationTracker } from "./chat/LiveLocationShare";
 
 interface Message {
   id: string;
@@ -104,9 +106,17 @@ export default function ChatWindow({
   } | null>(null);
   const [showJoinForm, setShowJoinForm] = useState(false);
   const ghostCheckDoneRef = useRef<string | null>(null);
+  const [showAISummary, setShowAISummary] = useState(true);
+  const [liveLocationSession, setLiveLocationSession] = useState<{ sessionId: string } | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  useEffect(() => {
+    const count = messages.filter(msg => !msg.isSender && msg.status !== 'seen').length;
+    setUnreadCount(count);
   }, [messages]);
 
   useEffect(() => {
@@ -584,7 +594,24 @@ export default function ChatWindow({
         onSendLocation={onSendLocation}
         onSendContact={onSendContact}
         onSendPoll={onSendPoll}
+        targetUsername={contactName}
+        onLiveLocationStarted={(session) => setLiveLocationSession(session)}
       />
+      
+      {contactName && (
+        <AISummarizeButton
+          contactUsername={contactName}
+          unreadCount={unreadCount}
+          onSummaryGenerated={() => setShowAISummary(true)}
+        />
+      )}
+      
+      {liveLocationSession && (
+        <LiveLocationTracker
+          sessionId={liveLocationSession.sessionId}
+          onStop={() => setLiveLocationSession(null)}
+        />
+      )}
     </div>
   );
 }

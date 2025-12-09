@@ -12,6 +12,8 @@ interface ChatInputProps {
   onSendPoll?: (poll: { question: string; options: string[] }) => void;
   disabled?: boolean;
   className?: string;
+  targetUsername?: string;
+  onLiveLocationStarted?: (session: any) => void;
 }
 
 export default function ChatInput({
@@ -22,6 +24,8 @@ export default function ChatInput({
   onSendPoll,
   disabled = false,
   className,
+  targetUsername,
+  onLiveLocationStarted,
 }: ChatInputProps) {
   const [message, setMessage] = useState("");
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
@@ -53,6 +57,11 @@ export default function ChatInput({
           }}
           onSendPoll={(poll) => {
             onSendPoll?.(poll);
+            setShowAttachmentMenu(false);
+          }}
+          targetUsername={targetUsername}
+          onLiveLocationStarted={(session) => {
+            onLiveLocationStarted?.(session);
             setShowAttachmentMenu(false);
           }}
         />

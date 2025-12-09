@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from "react";
-import { FileText, Camera, Image, Mic, MapPin, User, BarChart3, X } from "lucide-react";
+import { FileText, Camera, Image, Mic, MapPin, User, BarChart3, X, Radio } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { LiveLocationShare } from "./chat/LiveLocationShare";
 
 interface AttachmentMenuProps {
   onClose: () => void;
@@ -9,6 +10,8 @@ interface AttachmentMenuProps {
   onSendLocation: (location: { latitude: number; longitude: number }) => void;
   onSendContact: (contact: { name: string; phone: string; email?: string }) => void;
   onSendPoll: (poll: { question: string; options: string[] }) => void;
+  targetUsername?: string;
+  onLiveLocationStarted?: (session: any) => void;
 }
 
 export default function AttachmentMenu({
@@ -17,11 +20,14 @@ export default function AttachmentMenu({
   onSendLocation,
   onSendContact,
   onSendPoll,
+  targetUsername,
+  onLiveLocationStarted,
 }: AttachmentMenuProps) {
   const [isCapturing, setIsCapturing] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [showContactForm, setShowContactForm] = useState(false);
   const [showPollForm, setShowPollForm] = useState(false);
+  const [showLiveLocation, setShowLiveLocation] = useState(false);
   
   const documentInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -188,6 +194,21 @@ export default function AttachmentMenu({
     }} onCancel={() => setShowPollForm(false)} />;
   }
 
+  if (showLiveLocation && targetUsername) {
+    return (
+      <div className="fixed bottom-20 left-4 z-50">
+        <LiveLocationShare
+          targetUsername={targetUsername}
+          onClose={() => setShowLiveLocation(false)}
+          onSessionStarted={(session) => {
+            onLiveLocationStarted?.(session);
+            onClose();
+          }}
+        />
+      </div>
+    );
+  }
+
   if (isCapturing) {
     return (
       <div className="fixed inset-0 bg-black z-50 flex flex-col" data-testid="camera-capture-view">
@@ -272,6 +293,14 @@ export default function AttachmentMenu({
             onClick={() => setShowPollForm(true)}
             testId="option-poll"
           />
+          {targetUsername && (
+            <AttachmentOption
+              icon={<Radio className="w-6 h-6 text-emerald-400" />}
+              label="Live Location"
+              onClick={() => setShowLiveLocation(true)}
+              testId="option-live-location"
+            />
+          )}
         </div>
       </Card>
 

@@ -25,7 +25,11 @@ import chatsRoutes from './routes/chats.js';
 import uploadsRoutes from './routes/uploads.js';
 import missedCallsRoutes from './routes/missedCalls.js';
 import ghostRoutes from './routes/ghost.js';
+import chatSummaryRoutes from './routes/chatSummary.js';
+import liveLocationRoutes from './routes/liveLocation.js';
 import { startDeletionWorker, markMessageViewed, markAudioPlayed } from './services/deletionWorker.js';
+import { initializeGemini } from './services/aiService.js';
+import { initializeLocationWorker, startLocationExpiryWorker } from './services/locationExpiryWorker.js';
 import GhostChatSession, { encryptWithSessionKey, decryptWithSessionKey } from './models/GhostChat.js';
 import GhostMessage from './models/GhostMessage.js';
 import GhostUser from './models/GhostUser.js';
@@ -97,6 +101,8 @@ app.use('/api/chats', chatsRoutes);
 app.use('/api/uploads', uploadsRoutes);
 app.use('/api/missed-calls', missedCallsRoutes);
 app.use('/api/ghost', ghostRoutes);
+app.use('/api/chat-summary', chatSummaryRoutes);
+app.use('/api/live-location', liveLocationRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -1298,6 +1304,18 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     
     startDeletionWorker(io, userSockets);
     console.log('✓ Deletion worker started');
+    
+    // Initialize AI service (Gemini) if API key is available
+    if (process.env.GEMINI_API_KEY) {
+      initializeGemini(process.env.GEMINI_API_KEY);
+    } else {
+      console.log('⚠ Gemini API key not set - AI summarization disabled');
+    }
+    
+    // Initialize and start location expiry worker
+    initializeLocationWorker(io, userSockets);
+    startLocationExpiryWorker();
+    console.log('✓ Location expiry worker started');
   } catch (err) {
     console.error('Database initialization error:', err);
     process.exit(1);
