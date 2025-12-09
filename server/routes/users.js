@@ -2,6 +2,7 @@ import express from 'express';
 import User from '../models/User.js';
 import Connection from '../models/Connection.js';
 import Chat from '../models/Chat.js';
+import CloseFriend from '../models/CloseFriend.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { decryptField, encryptField } from '../lib/encryption.js';
 
@@ -9,18 +10,9 @@ const router = express.Router();
 
 router.get('/close-friends', authenticateToken, async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    const closeFriends = (user.closeFriendsList || []).map(encrypted => {
-      try {
-        return decryptField(encrypted);
-      } catch {
-        return null;
-      }
-    }).filter(Boolean);
+    const closeFriendRecords = await CloseFriend.find({ userId: req.user.id }).populate('friendId', 'username profileImage fullName');
+    
+    const closeFriends = closeFriendRecords.map(record => record.friendId?.username).filter(Boolean);
 
     res.json({ closeFriends });
   } catch (error) {
@@ -37,14 +29,20 @@ router.put('/close-friends', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'closeFriends must be an array of usernames' });
     }
 
-    const user = await User.findById(req.user.id);
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
+    const allUsers = await User.find({});
+    const friendUsers = allUsers.filter(u => closeFriends.includes(u.username));
+    const friendIds = friendUsers.map(u => u._id);
 
-    const encryptedCloseFriends = closeFriends.map(username => encryptField(username));
-    user.closeFriendsList = encryptedCloseFriends;
-    await user.save();
+    await CloseFriend.deleteMany({ userId: req.user.id });
+
+    const closeFriendDocs = friendIds.map(friendId => ({
+      userId: req.user.id,
+      friendId: friendId,
+    }));
+
+    if (closeFriendDocs.length > 0) {
+      await CloseFriend.insertMany(closeFriendDocs, { ordered: false });
+    }
 
     res.json({ 
       success: true, 
@@ -64,31 +62,34 @@ router.post('/close-friends/add', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Username is required' });
     }
 
-    const user = await User.findById(req.user.id);
-    if (!user) {
+    const allUsers = await User.find({});
+    const friendUser = allUsers.find(u => u.username === username);
+    
+    if (!friendUser) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const existingCloseFriends = (user.closeFriendsList || []).map(encrypted => {
-      try {
-        return decryptField(encrypted);
-      } catch {
-        return null;
-      }
-    }).filter(Boolean);
-
-    if (existingCloseFriends.includes(username)) {
+    const existing = await CloseFriend.findOne({ userId: req.user.id, friendId: friendUser._id });
+    if (existing) {
       return res.status(400).json({ error: 'User is already a close friend' });
     }
 
-    user.closeFriendsList = [...(user.closeFriendsList || []), encryptField(username)];
-    await user.save();
+    await CloseFriend.create({
+      userId: req.user.id,
+      friendId: friendUser._id,
+    });
+
+    const closeFriendRecords = await CloseFriend.find({ userId: req.user.id }).populate('friendId', 'username');
+    const closeFriends = closeFriendRecords.map(record => record.friendId?.username).filter(Boolean);
 
     res.json({ 
       success: true, 
-      closeFriends: [...existingCloseFriends, username]
+      closeFriends
     });
   } catch (error) {
+    if (error.code === 11000) {
+      return res.status(400).json({ error: 'User is already a close friend' });
+    }
     console.error('Add close friend error:', error);
     res.status(500).json({ error: 'Server error' });
   }
@@ -102,26 +103,21 @@ router.post('/close-friends/remove', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Username is required' });
     }
 
-    const user = await User.findById(req.user.id);
-    if (!user) {
+    const allUsers = await User.find({});
+    const friendUser = allUsers.find(u => u.username === username);
+    
+    if (!friendUser) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const existingCloseFriends = (user.closeFriendsList || []).map(encrypted => {
-      try {
-        return decryptField(encrypted);
-      } catch {
-        return null;
-      }
-    }).filter(Boolean);
+    await CloseFriend.deleteOne({ userId: req.user.id, friendId: friendUser._id });
 
-    const updatedCloseFriends = existingCloseFriends.filter(u => u !== username);
-    user.closeFriendsList = updatedCloseFriends.map(u => encryptField(u));
-    await user.save();
+    const closeFriendRecords = await CloseFriend.find({ userId: req.user.id }).populate('friendId', 'username');
+    const closeFriends = closeFriendRecords.map(record => record.friendId?.username).filter(Boolean);
 
     res.json({ 
       success: true, 
-      closeFriends: updatedCloseFriends
+      closeFriends
     });
   } catch (error) {
     console.error('Remove close friend error:', error);

@@ -2,6 +2,9 @@ import express from 'express';
 import { authenticateToken } from '../middleware/auth.js';
 import Story from '../models/Story.js';
 import StoryView from '../models/StoryView.js';
+import StoryAllowedViewer from '../models/StoryAllowedViewer.js';
+import StoryHiddenViewer from '../models/StoryHiddenViewer.js';
+import CloseFriend from '../models/CloseFriend.js';
 import User from '../models/User.js';
 import Connection from '../models/Connection.js';
 import { encryptField, decryptField } from '../lib/encryption.js';
@@ -23,9 +26,6 @@ router.post('/', authenticateToken, async (req, res) => {
 
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-    const encryptedAllowedViewers = (allowedViewers || []).map(username => encryptField(username));
-    const encryptedHiddenFromViewers = (hiddenFromViewers || []).map(username => encryptField(username));
-
     const story = new Story({
       userId: req.user.id,
       username: user.username,
@@ -35,12 +35,40 @@ router.post('/', authenticateToken, async (req, res) => {
       image: image || '',
       expiresAt,
       visibilityType: visibilityType || 'everyone',
-      allowedViewers: encryptedAllowedViewers,
-      hiddenFromViewers: encryptedHiddenFromViewers,
+      allowedViewers: [],
+      hiddenFromViewers: [],
       closeFriendsOnly: closeFriendsOnly || false,
     });
 
     await story.save();
+
+    const allUsers = await User.find({});
+    const userMap = {};
+    allUsers.forEach(u => { userMap[u.username] = u._id; });
+
+    if (visibilityType === 'only_selected' && allowedViewers && allowedViewers.length > 0) {
+      const allowedDocs = allowedViewers
+        .filter(username => userMap[username])
+        .map(username => ({
+          storyId: story._id,
+          viewerId: userMap[username],
+        }));
+      if (allowedDocs.length > 0) {
+        await StoryAllowedViewer.insertMany(allowedDocs, { ordered: false }).catch(() => {});
+      }
+    }
+
+    if (visibilityType === 'hide_from' && hiddenFromViewers && hiddenFromViewers.length > 0) {
+      const hiddenDocs = hiddenFromViewers
+        .filter(username => userMap[username])
+        .map(username => ({
+          storyId: story._id,
+          viewerId: userMap[username],
+        }));
+      if (hiddenDocs.length > 0) {
+        await StoryHiddenViewer.insertMany(hiddenDocs, { ordered: false }).catch(() => {});
+      }
+    }
 
     res.json({
       id: story._id,
@@ -82,8 +110,6 @@ router.get('/', authenticateToken, async (req, res) => {
       conn.sender === currentUser.username ? conn.receiver : conn.sender
     );
 
-    // Since username is encrypted in the User model, we need to fetch all users
-    // and manually decrypt usernames to get friend user IDs
     const allUsers = await User.find({});
     const friendUserIds = allUsers
       .filter(u => friendUsernames.includes(u.username))
@@ -107,14 +133,38 @@ router.get('/', authenticateToken, async (req, res) => {
     const storyOwners = await User.find({ _id: { $in: storyOwnerIds } });
     const ownerMap = {};
     storyOwners.forEach(owner => {
-      const closeFriendsList = (owner.closeFriendsList || []).map(encrypted => {
-        try { return decryptField(encrypted); } catch { return null; }
-      }).filter(Boolean);
       ownerMap[owner._id.toString()] = {
         username: owner.username,
         profileImage: owner.profileImage || '',
-        closeFriendsList,
       };
+    });
+
+    const allCloseFriendRecords = await CloseFriend.find({ userId: { $in: storyOwnerIds } });
+    const ownerCloseFriendsMap = {};
+    allCloseFriendRecords.forEach(cf => {
+      const ownerId = cf.userId.toString();
+      if (!ownerCloseFriendsMap[ownerId]) ownerCloseFriendsMap[ownerId] = [];
+      ownerCloseFriendsMap[ownerId].push(cf.friendId.toString());
+    });
+
+    const storyIds = stories.map(s => s._id);
+    const [allowedViewerRecords, hiddenViewerRecords] = await Promise.all([
+      StoryAllowedViewer.find({ storyId: { $in: storyIds } }),
+      StoryHiddenViewer.find({ storyId: { $in: storyIds } }),
+    ]);
+
+    const allowedViewersMap = {};
+    allowedViewerRecords.forEach(record => {
+      const sid = record.storyId.toString();
+      if (!allowedViewersMap[sid]) allowedViewersMap[sid] = [];
+      allowedViewersMap[sid].push(record.viewerId.toString());
+    });
+
+    const hiddenViewersMap = {};
+    hiddenViewerRecords.forEach(record => {
+      const sid = record.storyId.toString();
+      if (!hiddenViewersMap[sid]) hiddenViewersMap[sid] = [];
+      hiddenViewersMap[sid].push(record.viewerId.toString());
     });
 
     const filteredStories = stories.filter(story => {
@@ -123,9 +173,8 @@ router.get('/', authenticateToken, async (req, res) => {
       }
 
       if (story.closeFriendsOnly) {
-        const ownerData = ownerMap[story.userId.toString()];
-        if (!ownerData) return false;
-        if (!ownerData.closeFriendsList.includes(currentUser.username)) {
+        const ownerCloseFriends = ownerCloseFriendsMap[story.userId.toString()] || [];
+        if (!ownerCloseFriends.includes(req.user.id.toString())) {
           return false;
         }
       }
@@ -134,15 +183,11 @@ router.get('/', authenticateToken, async (req, res) => {
         case 'everyone':
           return true;
         case 'hide_from':
-          const hiddenFrom = (story.hiddenFromViewers || []).map(encrypted => {
-            try { return decryptField(encrypted); } catch { return null; }
-          }).filter(Boolean);
-          return !hiddenFrom.includes(currentUser.username);
+          const hiddenFrom = hiddenViewersMap[story._id.toString()] || [];
+          return !hiddenFrom.includes(req.user.id.toString());
         case 'only_selected':
-          const allowed = (story.allowedViewers || []).map(encrypted => {
-            try { return decryptField(encrypted); } catch { return null; }
-          }).filter(Boolean);
-          return allowed.includes(currentUser.username);
+          const allowed = allowedViewersMap[story._id.toString()] || [];
+          return allowed.includes(req.user.id.toString());
         default:
           return true;
       }
@@ -155,6 +200,8 @@ router.get('/', authenticateToken, async (req, res) => {
     const storiesWithViews = await Promise.all(filteredStories.map(async (story) => {
       const views = storyViews.filter(v => v.storyId.toString() === story._id.toString());
       const ownerInfo = ownerMap[story.userId.toString()] || {};
+      
+      const isCloseFriendStory = story.closeFriendsOnly === true;
 
       return {
         id: story._id,
@@ -169,6 +216,7 @@ router.get('/', authenticateToken, async (req, res) => {
         expiresAt: story.expiresAt,
         visibilityType: story.visibilityType,
         closeFriendsOnly: story.closeFriendsOnly,
+        isCloseFriendStory,
         viewCount: views.length,
         viewers: views.map(v => ({
           username: v.viewerUsername,
@@ -286,6 +334,33 @@ router.get('/:storyId/viewers', authenticateToken, async (req, res) => {
     res.json({ viewers: groupedViewers, totalViewCount });
   } catch (error) {
     console.error('Get story viewers error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.delete('/:storyId', authenticateToken, async (req, res) => {
+  try {
+    const { storyId } = req.params;
+
+    const story = await Story.findById(storyId);
+    if (!story) {
+      return res.status(404).json({ error: 'Story not found' });
+    }
+
+    if (story.userId.toString() !== req.user.id.toString()) {
+      return res.status(403).json({ error: 'Not authorized to delete this story' });
+    }
+
+    await Promise.all([
+      StoryAllowedViewer.deleteMany({ storyId }),
+      StoryHiddenViewer.deleteMany({ storyId }),
+      StoryView.deleteMany({ storyId }),
+      Story.findByIdAndDelete(storyId),
+    ]);
+
+    res.json({ success: true, message: 'Story deleted' });
+  } catch (error) {
+    console.error('Delete story error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

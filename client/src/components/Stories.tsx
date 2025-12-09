@@ -34,6 +34,7 @@ interface Story {
   isOwnStory: boolean;
   visibilityType?: string;
   closeFriendsOnly?: boolean;
+  isCloseFriendStory?: boolean;
 }
 
 interface GroupedStories {
@@ -358,6 +359,13 @@ export default function Stories() {
         {userStories.map(([userId, userStories]) => {
           const latestStory = userStories[0];
           const hasMultiple = userStories.length > 1;
+          const hasCloseFriendStory = userStories.some(s => s.isCloseFriendStory || s.closeFriendsOnly);
+          
+          const getRingClass = () => {
+            if (latestStory.isOwnStory) return 'border-2 border-swapgreen';
+            if (hasCloseFriendStory) return 'ring-2 ring-green-500';
+            return 'ring-2 ring-chain-blue';
+          };
           
           return (
             <div
@@ -367,13 +375,13 @@ export default function Stories() {
               data-testid={`story-${latestStory.username}`}
             >
               <div className="relative">
-                <Avatar className={`h-16 w-16 ${latestStory.isOwnStory ? 'border-2 border-swapgreen' : 'ring-2 ring-chain-blue'}`}>
+                <Avatar className={`h-16 w-16 ${getRingClass()}`}>
                   <AvatarImage src={latestStory.profileImage} alt={latestStory.username} />
                   <AvatarFallback className="bg-midnight-light text-white">
                     <User className="h-6 w-6" />
                   </AvatarFallback>
                 </Avatar>
-                {latestStory.closeFriendsOnly && (
+                {hasCloseFriendStory && (
                   <div className="absolute -top-1 -right-1 bg-green-500 text-white rounded-full h-5 w-5 flex items-center justify-center">
                     <Star className="h-3 w-3" />
                   </div>
