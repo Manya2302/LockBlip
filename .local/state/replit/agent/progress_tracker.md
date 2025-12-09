@@ -78,3 +78,12 @@
 [x] 3. Added proper message block creation with addMessageBlock function
 [x] 4. Included chatPublicKey and chatPrivateKey for proper message decryption
 [x] 5. Server running successfully - Ghost Mode activation should now work
+
+## Story Feed Visibility Verification (Dec 9, 2025)
+[x] 1. Verified GET /api/stories correctly fetches active stories (expiresAt > NOW)
+[x] 2. Verified API includes user's own stories AND friends' stories based on connections
+[x] 3. Verified visibilityType filtering: 'everyone', 'hide_from', 'only_selected' all working
+[x] 4. Verified closeFriendsOnly stories only show when user is in owner's closeFriendsList
+[x] 5. Verified stories are grouped by owner_id for carousel display
+[x] 6. Verified POST /api/stories correctly populates allowedViewers/hiddenFromViewers based on privacy option
+[x] 7. Server restarted and running successfully on port 5000
