@@ -65,6 +65,7 @@ export default function Home({ onLogout }: HomeProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
+  const [initialUnreadCount, setInitialUnreadCount] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const socketRef = useRef<Socket | null>(null);
@@ -544,6 +545,13 @@ export default function Home({ onLogout }: HomeProps) {
           }
         }
         
+        // Capture unread count BEFORE marking messages as seen
+        const unreadBeforeMarking = decryptedMessages.filter(
+          msg => !msg.isSender && msg.status !== 'seen'
+        ).length;
+        setInitialUnreadCount(unreadBeforeMarking);
+        console.log('📊 Initial unread count before marking seen:', unreadBeforeMarking);
+        
         setMessages(decryptedMessages);
         setCurrentPage(1);
         setHasMore(data.pagination.hasMore);
@@ -876,6 +884,7 @@ export default function Home({ onLogout }: HomeProps) {
             <ChatWindow
               contactName={activeContact?.name}
               messages={activeContactId === activeContact?.id ? messages : []}
+              initialUnreadCount={initialUnreadCount}
               blockCount={blockchain.length - 1}
               onSendMessage={handleSendMessage}
               onCopyEncrypted={(messageId: string) => {

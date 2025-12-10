@@ -51,9 +51,29 @@ export function LiveLocationShare({ targetUsername, onClose, onSessionStarted }:
       if (response.ok) {
         const data = await response.json();
         setPresets(data.presets);
+        setError(null);
+      } else {
+        const errData = await response.json().catch(() => ({}));
+        if (response.status === 401) {
+          setError('Session expired. Please refresh the page and try again.');
+        } else {
+          setError(errData.error || 'Failed to load presets');
+        }
+        // Set default presets as fallback
+        setPresets([
+          { key: '15min', label: '15 minutes', duration: 15 * 60 * 1000 },
+          { key: '1hour', label: '1 hour', duration: 60 * 60 * 1000 },
+          { key: '8hours', label: '8 hours', duration: 8 * 60 * 60 * 1000 },
+        ]);
       }
     } catch (error) {
       console.error('Failed to fetch presets:', error);
+      // Set default presets as fallback
+      setPresets([
+        { key: '15min', label: '15 minutes', duration: 15 * 60 * 1000 },
+        { key: '1hour', label: '1 hour', duration: 60 * 60 * 1000 },
+        { key: '8hours', label: '8 hours', duration: 8 * 60 * 60 * 1000 },
+      ]);
     }
   };
 
@@ -97,8 +117,14 @@ export function LiveLocationShare({ targetUsername, onClose, onSessionStarted }:
         onSessionStarted?.(data.session);
         onClose();
       } else {
-        const errData = await response.json();
-        setError(errData.error || 'Failed to start location sharing');
+        const errData = await response.json().catch(() => ({}));
+        if (response.status === 401) {
+          setError('Session expired. Please refresh the page and log in again.');
+        } else if (response.status === 403) {
+          setError('Your IP address may have changed. Please check your email for IP authorization.');
+        } else {
+          setError(errData.error || 'Failed to start location sharing');
+        }
       }
     } catch (error: any) {
       if (error.code === 1) {

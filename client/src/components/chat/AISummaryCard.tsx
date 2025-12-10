@@ -186,13 +186,41 @@ export function AISummarizeButton({ contactUsername, unreadCount, onSummaryGener
   const [isLoading, setIsLoading] = useState(false);
   const [showButton, setShowButton] = useState(false);
   const [threshold, setThreshold] = useState(7);
+  const [aiAvailable, setAiAvailable] = useState(true);
 
+  // Check eligibility when contact changes
   useEffect(() => {
+    setShowButton(false);
     checkEligibility();
-  }, [contactUsername, unreadCount]);
+  }, [contactUsername]);
+
+  // Show button based on local unread count (primary mechanism)
+  // This uses the initial unread count captured before messages are marked as seen
+  useEffect(() => {
+    if (unreadCount >= threshold && aiAvailable) {
+      console.log('📊 AI Summary: Showing button based on unread count:', unreadCount, 'threshold:', threshold);
+      setShowButton(true);
+    }
+  }, [unreadCount, threshold, aiAvailable]);
 
   const checkEligibility = async () => {
     try {
+      // First check if AI is available
+      const statusResponse = await fetch('/api/chat-summary/status', {
+        credentials: 'include',
+      });
+      if (statusResponse.ok) {
+        const statusData = await statusResponse.json();
+        setAiAvailable(statusData.available);
+        setThreshold(statusData.unreadThreshold || 7);
+        
+        if (!statusData.available) {
+          setShowButton(false);
+          return;
+        }
+      }
+      
+      // Then check for this specific contact
       const response = await fetch(`/api/chat-summary/check/${contactUsername}`, {
         credentials: 'include',
       });

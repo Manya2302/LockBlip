@@ -35,6 +35,7 @@ interface ChatWindowProps {
   contactId?: string;
   messages: Message[];
   blockCount: number;
+  initialUnreadCount?: number;
   onSendMessage: (message: string) => void;
   onSendFile?: (file: File, type: 'document' | 'image' | 'video' | 'audio') => void;
   onSendLocation?: (location: { latitude: number; longitude: number }) => void;
@@ -60,11 +61,14 @@ interface ChatWindowProps {
   onEnterGhostMode?: () => void;
 }
 
+// Helper to get initial unread count that was captured before messages were marked as seen
+
 export default function ChatWindow({
   contactName,
   contactId,
   messages,
   blockCount,
+  initialUnreadCount = 0,
   onSendMessage,
   onSendFile,
   onSendLocation,
@@ -601,7 +605,7 @@ export default function ChatWindow({
       {contactName && (
         <AISummarizeButton
           contactUsername={contactName}
-          unreadCount={unreadCount}
+          unreadCount={Math.max(initialUnreadCount, unreadCount)}
           onSummaryGenerated={() => setShowAISummary(true)}
         />
       )}
