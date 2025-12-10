@@ -100,20 +100,36 @@ export function LiveLocationShare({ targetUsername, onClose, onSessionStarted }:
         body.expiryPreset = selectedPreset;
       }
 
+      console.log('📍 Starting location sharing request...');
+      console.log('📍 Request body:', body);
+      
+      const token = localStorage.getItem('token');
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
       const response = await fetch('/api/live-location/start', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         credentials: 'include',
         body: JSON.stringify(body),
       });
 
+      console.log('📍 Response status:', response.status);
+
       if (response.ok) {
         const data = await response.json();
+        console.log('📍 Location sharing started successfully:', data);
         onSessionStarted?.(data.session);
         onClose();
       } else {
         const errData = await response.json().catch(() => ({}));
+        console.log('📍 Error response:', errData);
+        console.log('📍 Response status code:', response.status);
+        
         if (response.status === 401) {
+          console.error('📍 401 Unauthorized - Token may be missing or expired');
           setError('Please log in again to share your location.');
         } else if (response.status === 403) {
           if (errData.error === 'IP_NOT_AUTHORIZED') {
@@ -292,9 +308,15 @@ export function LiveLocationTracker({ sessionId, onStop }: LiveLocationTrackerPr
 
   const sendLocationUpdate = async (position: GeolocationPosition) => {
     try {
+      const token = localStorage.getItem('token');
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
       const response = await fetch(`/api/live-location/update/${sessionId}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         credentials: 'include',
         body: JSON.stringify({
           latitude: position.coords.latitude,
@@ -325,8 +347,15 @@ export function LiveLocationTracker({ sessionId, onStop }: LiveLocationTrackerPr
 
   const handleStop = async () => {
     try {
+      const token = localStorage.getItem('token');
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
       await fetch(`/api/live-location/stop/${sessionId}`, {
         method: 'POST',
+        headers,
         credentials: 'include',
       });
     } catch (error) {
@@ -398,7 +427,14 @@ export function LiveLocationViewer({ sessionId, sharerName }: LiveLocationViewer
 
   const fetchLocation = async () => {
     try {
+      const token = localStorage.getItem('token');
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
       const response = await fetch(`/api/live-location/view/${sessionId}`, {
+        headers,
         credentials: 'include',
       });
 
