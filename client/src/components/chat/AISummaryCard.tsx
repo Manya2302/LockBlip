@@ -192,6 +192,7 @@ export function AISummarizeButton({ contactUsername, unreadCount, onSummaryGener
   const [showButton, setShowButton] = useState(false);
   const [threshold, setThreshold] = useState(7);
   const [aiAvailable, setAiAvailable] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Check eligibility when contact changes
   useEffect(() => {
@@ -242,6 +243,7 @@ export function AISummarizeButton({ contactUsername, unreadCount, onSummaryGener
 
   const handleSummarize = async () => {
     setIsLoading(true);
+    setError(null);
     try {
       const response = await fetch(`/api/chat-summary/generate/${contactUsername}`, {
         method: 'POST',
@@ -250,34 +252,58 @@ export function AISummarizeButton({ contactUsername, unreadCount, onSummaryGener
         body: JSON.stringify({ includeAll: false }),
       });
       
-      if (response.ok) {
-        const data = await response.json();
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
         onSummaryGenerated?.(data.summary);
         setShowButton(false);
+        setError(null);
+      } else {
+        const errorMessage = data.error || 'Failed to generate summary';
+        setError(errorMessage);
+        console.error('Summary generation failed:', errorMessage);
+        
+        // Auto-hide error after 5 seconds
+        setTimeout(() => setError(null), 5000);
       }
-    } catch (error) {
-      console.error('Failed to generate summary:', error);
+    } catch (err) {
+      console.error('Failed to generate summary:', err);
+      setError('Network error. Please try again.');
+      setTimeout(() => setError(null), 5000);
     } finally {
       setIsLoading(false);
     }
   };
 
-  if (!showButton) {
+  if (!showButton && !error) {
     return null;
   }
 
   return (
-    <Button
-      onClick={handleSummarize}
-      disabled={isLoading}
-      className="fixed bottom-24 right-4 z-40 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white shadow-lg rounded-full px-4 py-2"
-    >
-      {isLoading ? (
-        <Loader2 className="w-4 h-4 animate-spin mr-2" />
-      ) : (
-        <Sparkles className="w-4 h-4 mr-2" />
+    <div className="absolute bottom-20 right-4 z-40 flex flex-col items-end gap-2">
+      {error && (
+        <div className="bg-red-500/90 text-white text-xs px-3 py-2 rounded-lg shadow-lg max-w-xs animate-in fade-in slide-in-from-bottom-2">
+          {error}
+        </div>
       )}
-      Summarize Chat
-    </Button>
+      {showButton && (
+        <Button
+          onClick={handleSummarize}
+          disabled={isLoading}
+          size="sm"
+          className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white shadow-lg rounded-full h-10 px-3 flex items-center gap-2 transition-all duration-300 hover:scale-105"
+          title="Summarize unread messages with AI"
+        >
+          <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center">
+            {isLoading ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
+            ) : (
+              <Sparkles className="w-3.5 h-3.5 text-white" />
+            )}
+          </div>
+          <span className="text-xs font-medium">Summarize</span>
+        </Button>
+      )}
+    </div>
   );
 }

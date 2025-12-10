@@ -22,7 +22,6 @@ SMTP_SECURE = "false"
 SMTP_USER = "hatakekakashimeme@gmail.com"
 SMTP_PASS = "fnpb xzoi gdkg farh"
 NODE_ENV = "development"
-GEMINI_API_KEY = "AIzaSyDruhhyhdznSTWxkj892ifkKC3g9nBVBJw"
 
 [workflows]
 runButton = "Project"
@@ -51,6 +50,10 @@ waitForPort = 5000
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[[ports]]
+localPort = 36193
+externalPort = 3002
 
 [[ports]]
 localPort = 42361

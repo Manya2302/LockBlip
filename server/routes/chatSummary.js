@@ -147,7 +147,9 @@ router.post('/generate/:username', authenticateToken, async (req, res) => {
     const formattedMessages = [];
     for (const msg of messagesToSummarize) {
       try {
-        let content = '[Unable to decrypt]';
+        let content = null;
+        
+        // Only attempt decryption if we have all required keys
         if (msg.encryptedMessage && msg.chatPublicKey && msg.chatPrivateKey) {
           try {
             content = await decryptMessageWithChatKeys(
@@ -156,10 +158,19 @@ router.post('/generate/:username', authenticateToken, async (req, res) => {
               msg.chatPrivateKey
             );
           } catch (e) {
-            console.warn('Failed to decrypt message for summary:', e.message);
+            // Skip messages that fail to decrypt - don't include them in summary
+            console.warn('Skipping message due to decryption failure:', e.message);
+            continue;
           }
-        } else if (msg.encryptedMessage) {
-          content = msg.encryptedMessage;
+        } else {
+          // Skip messages without proper encryption keys
+          console.warn('Skipping message - missing encryption keys');
+          continue;
+        }
+        
+        // Skip if content is empty or null
+        if (!content || content.trim() === '') {
+          continue;
         }
         
         const sender = decryptField(msg.senderId);
@@ -172,12 +183,22 @@ router.post('/generate/:username', authenticateToken, async (req, res) => {
           timestamp: msg.timestamp,
         });
       } catch (err) {
-        console.warn('Error processing message for summary:', err);
+        console.warn('Error processing message for summary, skipping:', err.message);
+        continue;
       }
     }
 
-    console.log('📝 Formatted messages for AI:', formattedMessages.length, 
+    console.log('📝 Successfully decrypted messages for AI:', formattedMessages.length, 
       formattedMessages.slice(0, 3).map(m => ({ sender: m.sender, content: m.content?.substring(0, 50) })));
+    
+    // Check if we have enough valid messages to summarize
+    if (formattedMessages.length === 0) {
+      return res.status(400).json({ error: 'No messages could be decrypted for summary' });
+    }
+    
+    if (formattedMessages.length < 3) {
+      return res.status(400).json({ error: 'Not enough readable messages to generate a meaningful summary (need at least 3)' });
+    }
     
     const result = await summarizeChat(formattedMessages, {
       isGroupChat: false,

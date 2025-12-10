@@ -89,7 +89,20 @@ Summary:`;
     };
   } catch (error) {
     console.error('Gemini summarization error:', error);
-    throw new Error('Failed to generate summary');
+    
+    // Check for specific error types
+    if (error.status === 403) {
+      if (error.message?.includes('leaked')) {
+        throw new Error('API key has been invalidated. Please update your Gemini API key.');
+      }
+      throw new Error('API key is invalid or unauthorized. Please check your Gemini API key.');
+    }
+    
+    if (error.status === 429) {
+      throw new Error('Rate limit exceeded. Please try again later.');
+    }
+    
+    throw new Error('Failed to generate summary. Please try again.');
   }
 }
 
