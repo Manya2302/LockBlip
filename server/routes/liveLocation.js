@@ -21,6 +21,9 @@ function getChatRoomId(user1, user2) {
 
 router.post('/start', authenticateToken, async (req, res) => {
   try {
+    console.log('📍 Live Location Start Request received');
+    console.log('📍 User from auth:', req.user?.username, 'ID:', req.user?.id?.toString());
+    
     const { 
       targetUsername, 
       expiryPreset, 
@@ -30,8 +33,10 @@ router.post('/start', authenticateToken, async (req, res) => {
       initialLocation,
     } = req.body;
 
+    console.log('📍 Request body:', { targetUsername, expiryPreset, customDuration, hasInitialLocation: !!initialLocation });
+
     const currentUser = req.user.username;
-    const userId = req.user.id;
+    const userId = req.user.id?.toString();
     
     if (!targetUsername) {
       return res.status(400).json({ error: 'Target username is required' });
@@ -43,12 +48,13 @@ router.post('/start', authenticateToken, async (req, res) => {
     for (const session of activeSessions) {
       try {
         const decryptedUserId = decryptField(session.userId);
-        if (decryptedUserId === userId) {
+        console.log('📍 Comparing session userId:', decryptedUserId, 'with current:', userId);
+        if (decryptedUserId === userId || decryptedUserId?.toString() === userId) {
           existingSessionId = session.sessionId;
           break;
         }
       } catch (e) {
-        console.warn('Failed to decrypt userId for existing session check');
+        console.warn('Failed to decrypt userId for existing session check:', e.message);
       }
     }
     
