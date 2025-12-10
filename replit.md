@@ -31,6 +31,14 @@ Lockblip is a secure, end-to-end encrypted chat application with blockchain-back
 ```
 
 ## Recent Changes (Dec 10, 2025)
+- **Live Location Sharing Feature Complete**:
+  - Chat messages with `messageType='live_location'` created when sharing starts
+  - Clickable live location cards in chat with green gradient styling
+  - `/live/:sessionId` view page for real-time location tracking
+  - Viewer authorization properly handles encrypted viewer lists
+  - Chat message status updates to 'stopped' or 'expired' when session ends
+  - Fixed Chat.create to use new Chat() + save() pattern for proper encryption
+
 - **AI Summarize Button Complete Fix**:
   - Fixed summary not displaying after clicking Summarize button
   - Added `generatedSummary` state in ChatWindow to store and display results
