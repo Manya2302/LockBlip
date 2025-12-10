@@ -29,27 +29,46 @@ router.get('/check/:username', authenticateToken, async (req, res) => {
     const currentUser = req.user.username;
     const chatRoomId = getChatRoomId(currentUser, username);
     
-    const unreadMessages = await Chat.find({
-      chatRoomId,
-      status: { $ne: 'seen' },
-    }).lean();
+    // Get the last summary timestamp for this chat
+    const lastSummary = await ChatSummary.findOne({ chatRoomId, userId: currentUser })
+      .sort({ createdAt: -1 })
+      .lean();
+    
+    const lastSummaryTime = lastSummary ? new Date(lastSummary.createdAt) : null;
+    
+    // Query for messages since last summary (or all messages if no previous summary)
+    const query = { chatRoomId };
+    if (lastSummaryTime) {
+      query.timestamp = { $gt: lastSummaryTime };
+    }
+    
+    const recentMessages = await Chat.find(query).lean();
 
-    const filteredUnread = [];
-    for (const msg of unreadMessages) {
+    // Filter to only messages received by current user
+    const receivedMessages = [];
+    for (const msg of recentMessages) {
       try {
         const decryptedReceiver = decryptField(msg.receiverId);
         if (decryptedReceiver === currentUser) {
-          filteredUnread.push(msg);
+          receivedMessages.push(msg);
         }
       } catch (err) {
         console.warn('Failed to decrypt receiverId:', err);
       }
     }
 
-    const shouldShowButton = filteredUnread.length >= UNREAD_THRESHOLD;
+    const shouldShowButton = receivedMessages.length >= UNREAD_THRESHOLD;
+    
+    console.log('📊 AI Summary check:', { 
+      username, 
+      currentUser, 
+      messageCount: receivedMessages.length, 
+      threshold: UNREAD_THRESHOLD,
+      shouldShow: shouldShowButton && isAIAvailable()
+    });
     
     res.json({
-      unreadCount: filteredUnread.length,
+      unreadCount: receivedMessages.length,
       showSummarizeButton: shouldShowButton && isAIAvailable(),
       threshold: UNREAD_THRESHOLD,
     });
@@ -62,15 +81,26 @@ router.get('/check/:username', authenticateToken, async (req, res) => {
 router.post('/generate/:username', authenticateToken, async (req, res) => {
   try {
     const { username } = req.params;
-    const { includeAll = false } = req.body;
+    const { includeAll = false, messageCount = 50 } = req.body;
     const currentUser = req.user.username;
     const chatRoomId = getChatRoomId(currentUser, username);
 
+    console.log('📝 AI Summary request:', { username, currentUser, chatRoomId, includeAll });
+
     if (!isAIAvailable()) {
+      console.log('❌ AI service not available');
       return res.status(503).json({ error: 'AI service not available' });
     }
 
     let messagesToSummarize;
+    
+    // Get the last summary timestamp for this chat to avoid re-summarizing old messages
+    const lastSummary = await ChatSummary.findOne({ chatRoomId, userId: currentUser })
+      .sort({ createdAt: -1 })
+      .lean();
+    
+    const lastSummaryTime = lastSummary ? new Date(lastSummary.createdAt) : null;
+    console.log('📝 Last summary time:', lastSummaryTime);
     
     if (includeAll) {
       messagesToSummarize = await Chat.find({ chatRoomId })
@@ -78,11 +108,23 @@ router.post('/generate/:username', authenticateToken, async (req, res) => {
         .limit(100)
         .lean();
     } else {
-      const allMessages = await Chat.find({
-        chatRoomId,
-        status: { $ne: 'seen' },
-      }).lean();
+      // Get recent messages that were sent TO the current user (messages they received)
+      // This includes both read and unread messages since the last summary
+      const query = { chatRoomId };
+      
+      // If there was a previous summary, only get messages after it
+      if (lastSummaryTime) {
+        query.timestamp = { $gt: lastSummaryTime };
+      }
+      
+      const allMessages = await Chat.find(query)
+        .sort({ timestamp: -1 })
+        .limit(messageCount)
+        .lean();
 
+      console.log('📝 Found messages in chatroom:', allMessages.length);
+
+      // Filter to only messages received by current user (not sent by them)
       messagesToSummarize = [];
       for (const msg of allMessages) {
         try {
@@ -94,6 +136,8 @@ router.post('/generate/:username', authenticateToken, async (req, res) => {
           console.warn('Failed to decrypt receiverId:', err);
         }
       }
+      
+      console.log('📝 Messages to summarize (received by user):', messagesToSummarize.length);
     }
 
     if (messagesToSummarize.length === 0) {
@@ -132,12 +176,18 @@ router.post('/generate/:username', authenticateToken, async (req, res) => {
       }
     }
 
+    console.log('📝 Formatted messages for AI:', formattedMessages.length, 
+      formattedMessages.slice(0, 3).map(m => ({ sender: m.sender, content: m.content?.substring(0, 50) })));
+    
     const result = await summarizeChat(formattedMessages, {
       isGroupChat: false,
       maxLength: 500,
     });
 
+    console.log('📝 AI Summary result:', result.summary?.substring(0, 100), '... (', result.messageCount, 'messages)');
+
     const keywords = await extractKeywords(result.summary);
+    console.log('📝 Extracted keywords:', keywords);
 
     const summary = await ChatSummary.create({
       chatRoomId,

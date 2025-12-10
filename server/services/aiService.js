@@ -30,7 +30,7 @@ export async function summarizeChat(messages, options = {}) {
     throw new Error('Gemini AI not initialized. Please set GEMINI_API_KEY.');
   }
 
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
   const formattedMessages = messages.map(msg => {
     const sender = msg.sender || 'Unknown';
@@ -85,7 +85,7 @@ Summary:`;
       summary: summary.trim(),
       messageCount: messages.length,
       generatedAt: new Date(),
-      model: 'gemini-1.5-flash',
+      model: 'gemini-2.0-flash',
     };
   } catch (error) {
     console.error('Gemini summarization error:', error);
@@ -113,7 +113,7 @@ export async function extractKeywords(text) {
     return [];
   }
 
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
   
   const prompt = `Extract 3-5 key topics/keywords from this text. Return only a comma-separated list of keywords, nothing else.
 
