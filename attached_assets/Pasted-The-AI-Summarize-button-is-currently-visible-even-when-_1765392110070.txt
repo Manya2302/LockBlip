@@ -1,0 +1,40 @@
+The AI Summarize button is currently visible even when a chat contains fewer than the required unread messages, and when the button is pressed the backend attempts to decrypt all messages in the unread range but fails because some legacy messages either have no encryption key, wrong session key, or missing chatKey metadata, causing the decrypt step inside decryptMessageWithChatKeys() to throw “Decryption failed” for each message and therefore the summarization payload is replaced with “[Unable to decrypt]”, which breaks the summarization context. Additionally, the Gemini API request returns 403 because the current API key was flagged as leaked. The fix is: (1) before calling Gemini, filter messages to only those with valid decryptable content, wrap each decrypt attempt in try/catch, and skip messages with invalid or missing encryption, while logging them silently; (2) require decryption to happen only for messages where chatKey matches the session key; (3) update the summarization payload to include only successfully decrypted text, so the AI input is valid; (4) replace the Gemini API key with a new key, store it in a secure server-side env, and do not expose it to client code; and finally (5) modify the UI logic to display the “Summarize Chat” button ONLY when a specific chat has unread_count >= 7 and hide it otherwise by checking unread count in the chatRoomId specific state before rendering the FAB so the button is never shown globally or for chats with < 7 unread messages.
+
+Why this solves everything
+Decryption error
+
+Messages that fail decrypt will no longer break the whole summarization call. You only summarize valid text.
+
+Gemini 403
+
+You must rotate the key immediately. Right now the request is blocked, so even if decrypt succeeded you would still get no summary.
+
+Button visibility logic
+
+Instead of checking unread globally, check unread count for the current chatRoomId before rendering.
+
+Minimum code logic to implement
+Frontend condition
+if (unreadCount >= 7) showSummaryButton = true;
+
+Backend decrypt wrapper
+try {
+ content = decrypt(...)
+} catch(e){
+ continue // skip message
+}
+
+
+Only append decrypted message text.
+
+Required action immediately
+
+Regenerate Gemini API key
+
+Move it to server-side env
+
+Never expose it in client config
+
+Add decrypt skip logic
+
+Add unreadCount >= 7 UI condition per chat
