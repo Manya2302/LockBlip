@@ -14,18 +14,23 @@ interface Summary {
 interface AISummaryCardProps {
   contactUsername: string;
   onDismiss?: () => void;
+  initialSummary?: Summary | null;
 }
 
-export function AISummaryCard({ contactUsername, onDismiss }: AISummaryCardProps) {
-  const [summary, setSummary] = useState<Summary | null>(null);
+export function AISummaryCard({ contactUsername, onDismiss, initialSummary }: AISummaryCardProps) {
+  const [summary, setSummary] = useState<Summary | null>(initialSummary || null);
   const [isExpanded, setIsExpanded] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [historyList, setHistoryList] = useState<Summary[]>([]);
 
   useEffect(() => {
-    fetchLatestSummary();
-  }, [contactUsername]);
+    if (initialSummary) {
+      setSummary(initialSummary);
+    } else {
+      fetchLatestSummary();
+    }
+  }, [contactUsername, initialSummary]);
 
   const fetchLatestSummary = async () => {
     try {

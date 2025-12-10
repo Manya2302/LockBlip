@@ -110,7 +110,14 @@ export default function ChatWindow({
   } | null>(null);
   const [showJoinForm, setShowJoinForm] = useState(false);
   const ghostCheckDoneRef = useRef<string | null>(null);
-  const [showAISummary, setShowAISummary] = useState(true);
+  const [showAISummary, setShowAISummary] = useState(false);
+  const [generatedSummary, setGeneratedSummary] = useState<{
+    id: string;
+    text: string;
+    messageCount: number;
+    keywords: string[];
+    createdAt: string;
+  } | null>(null);
   const [liveLocationSession, setLiveLocationSession] = useState<{ sessionId: string } | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
 
@@ -602,11 +609,27 @@ export default function ChatWindow({
         onLiveLocationStarted={(session) => setLiveLocationSession(session)}
       />
       
+      {contactName && showAISummary && generatedSummary && (
+        <div className="fixed bottom-28 right-4 z-40 max-w-sm">
+          <AISummaryCard 
+            contactUsername={contactName} 
+            initialSummary={generatedSummary}
+            onDismiss={() => {
+              setShowAISummary(false);
+              setGeneratedSummary(null);
+            }}
+          />
+        </div>
+      )}
+      
       {contactName && (
         <AISummarizeButton
           contactUsername={contactName}
           unreadCount={Math.max(initialUnreadCount, unreadCount)}
-          onSummaryGenerated={() => setShowAISummary(true)}
+          onSummaryGenerated={(summary) => {
+            setGeneratedSummary(summary);
+            setShowAISummary(true);
+          }}
         />
       )}
       

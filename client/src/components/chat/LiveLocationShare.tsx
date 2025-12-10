@@ -53,27 +53,22 @@ export function LiveLocationShare({ targetUsername, onClose, onSessionStarted }:
         setPresets(data.presets);
         setError(null);
       } else {
-        const errData = await response.json().catch(() => ({}));
-        if (response.status === 401) {
-          setError('Session expired. Please refresh the page and try again.');
-        } else {
-          setError(errData.error || 'Failed to load presets');
-        }
-        // Set default presets as fallback
+        console.warn('Failed to fetch presets, using defaults');
         setPresets([
           { key: '15min', label: '15 minutes', duration: 15 * 60 * 1000 },
           { key: '1hour', label: '1 hour', duration: 60 * 60 * 1000 },
           { key: '8hours', label: '8 hours', duration: 8 * 60 * 60 * 1000 },
         ]);
+        setError(null);
       }
     } catch (error) {
       console.error('Failed to fetch presets:', error);
-      // Set default presets as fallback
       setPresets([
         { key: '15min', label: '15 minutes', duration: 15 * 60 * 1000 },
         { key: '1hour', label: '1 hour', duration: 60 * 60 * 1000 },
         { key: '8hours', label: '8 hours', duration: 8 * 60 * 60 * 1000 },
       ]);
+      setError(null);
     }
   };
 
@@ -119,11 +114,15 @@ export function LiveLocationShare({ targetUsername, onClose, onSessionStarted }:
       } else {
         const errData = await response.json().catch(() => ({}));
         if (response.status === 401) {
-          setError('Session expired. Please refresh the page and log in again.');
+          setError('Please log in again to share your location.');
         } else if (response.status === 403) {
-          setError('Your IP address may have changed. Please check your email for IP authorization.');
+          if (errData.error === 'IP_NOT_AUTHORIZED') {
+            setError('New device detected. Please check your email to authorize this device.');
+          } else {
+            setError('Access denied. Please try logging in again.');
+          }
         } else {
-          setError(errData.error || 'Failed to start location sharing');
+          setError(errData.error || 'Failed to start location sharing. Please try again.');
         }
       }
     } catch (error: any) {

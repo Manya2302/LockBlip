@@ -331,7 +331,7 @@ router.post('/alert/:sessionId', authenticateToken, async (req, res) => {
   }
 });
 
-router.get('/presets', authenticateToken, (req, res) => {
+router.get('/presets', (req, res) => {
   res.json({
     presets: [
       { key: '15min', label: '15 minutes', duration: EXPIRY_PRESETS['15min'] },
