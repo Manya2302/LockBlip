@@ -31,16 +31,20 @@ Lockblip is a secure, end-to-end encrypted chat application with blockchain-back
 ```
 
 ## Recent Changes (Dec 10, 2025)
-- **AI Summarize Button Fix**:
-  - Fixed race condition where messages marked as "seen" prevented AI summarization button from appearing
-  - Capture initial unread count before socket emits "messages_seen" event
-  - Use Math.max(initialUnreadCount, unreadCount) to ensure button shows when threshold is met
-  - Button properly resets state when switching between contacts
+- **AI Summarize Button Complete Fix**:
+  - Fixed summary not displaying after clicking Summarize button
+  - Added `generatedSummary` state in ChatWindow to store and display results
+  - Updated AISummaryCard to accept `initialSummary` prop for immediate display
+  - Button shows loading spinner while Gemini API processes request
+  - Summary card displays with keywords and message count after generation
+  - Dismiss button properly resets state
 
-- **Live Location Error Handling**:
-  - Added fallback presets (15min, 1hour, 8hours) when API fetch fails
-  - Enhanced 401/403 auth error messages with actionable user feedback
-  - Improved error handling in start location sharing flow
+- **Live Location "Session Expired" Fix**:
+  - Removed authentication requirement from `/api/live-location/presets` endpoint (static data)
+  - Fixed the "Session expired" error that appeared when opening Live Location share dialog
+  - Improved error handling to use fallback presets silently instead of showing error
+  - Better error messages for authentication issues when starting location sharing
+  - Fixed IP authorization error messages to be more user-friendly
 
 ## Recent Changes (Dec 8, 2025)
 - **Self-Destructing Communication System**:
