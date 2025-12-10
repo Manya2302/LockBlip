@@ -3,7 +3,7 @@
 ## Overview
 Lockblip is a secure, end-to-end encrypted chat application with blockchain-backed message verification. It features military-grade encryption, WebRTC video calls, stories, and a blockchain ledger for message integrity.
 
-**Last Updated:** December 8, 2025
+**Last Updated:** December 10, 2025
 
 ## Tech Stack
 - **Frontend:** React + Vite + TypeScript + Tailwind CSS
@@ -29,6 +29,18 @@ Lockblip is a secure, end-to-end encrypted chat application with blockchain-back
 ├── shared/              # Shared types and schemas
 └── uploads/             # User uploaded files
 ```
+
+## Recent Changes (Dec 10, 2025)
+- **AI Summarize Button Fix**:
+  - Fixed race condition where messages marked as "seen" prevented AI summarization button from appearing
+  - Capture initial unread count before socket emits "messages_seen" event
+  - Use Math.max(initialUnreadCount, unreadCount) to ensure button shows when threshold is met
+  - Button properly resets state when switching between contacts
+
+- **Live Location Error Handling**:
+  - Added fallback presets (15min, 1hour, 8hours) when API fetch fails
+  - Enhanced 401/403 auth error messages with actionable user feedback
+  - Improved error handling in start location sharing flow
 
 ## Recent Changes (Dec 8, 2025)
 - **Self-Destructing Communication System**:
