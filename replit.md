@@ -31,6 +31,14 @@ Lockblip is a secure, end-to-end encrypted chat application with blockchain-back
 ```
 
 ## Recent Changes (Dec 10, 2025)
+- **AI Summarization Decryption Fix**:
+  - Fixed decryption error handling - messages that fail to decrypt are now skipped instead of breaking the feature
+  - Added proper error handling for senderId decryption failures
+  - Requires minimum 3 successfully decrypted messages before generating summary
+  - Improved error messages for API key issues (403, rate limits)
+  - Replaced leaked Gemini API key with new secret
+  - Updated button styling with professional gradient design and AI icon
+
 - **Live Location Sharing Feature Complete**:
   - Chat messages with `messageType='live_location'` created when sharing starts
   - Clickable live location cards in chat with green gradient styling
