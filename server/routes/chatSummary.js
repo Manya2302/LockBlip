@@ -173,7 +173,14 @@ router.post('/generate/:username', authenticateToken, async (req, res) => {
           continue;
         }
         
-        const sender = decryptField(msg.senderId);
+        // Attempt to decrypt sender ID, skip message if it fails
+        let sender;
+        try {
+          sender = decryptField(msg.senderId);
+        } catch (e) {
+          console.warn('Skipping message - failed to decrypt senderId:', e.message);
+          continue;
+        }
         
         formattedMessages.push({
           sender,
