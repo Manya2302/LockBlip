@@ -20,9 +20,10 @@ interface Message {
   isSender: boolean;
   blockNumber?: number;
   status?: 'sent' | 'delivered' | 'seen';
-  messageType?: 'text' | 'image' | 'video' | 'audio' | 'document' | 'location' | 'contact' | 'poll';
+  messageType?: 'text' | 'image' | 'video' | 'audio' | 'document' | 'location' | 'contact' | 'poll' | 'live_location';
   mediaUrl?: string;
   metadata?: any;
+  liveLocationStatus?: 'active' | 'expired' | 'stopped' | null;
 }
 
 interface MissedCallCounts {

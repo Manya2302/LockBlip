@@ -2,7 +2,9 @@ import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { authenticateToken } from '../middleware/auth.js';
 import LiveLocation from '../models/LiveLocation.js';
+import Chat from '../models/Chat.js';
 import { decryptField } from '../lib/encryption.js';
+import { encryptMessageWithChatKeys, calculateMessageHash, getPreviousMessageHash } from '../lib/chatCrypto.js';
 
 const router = express.Router();
 
@@ -97,6 +99,43 @@ router.post('/start', authenticateToken, async (req, res) => {
       }] : [],
     });
 
+    // Create a chat message of type live_location so the receiver sees it in chat
+    try {
+      const messageContent = `${currentUser} started sharing live location`;
+      const { encryptedMessage, chatPublicKey, chatPrivateKey } = await encryptMessageWithChatKeys(messageContent, chatRoomId);
+      const previousHash = await getPreviousMessageHash(chatRoomId);
+      const timestamp = new Date();
+      const hash = calculateMessageHash(chatRoomId, currentUser, targetUsername, 'live_location', encryptedMessage, timestamp.toISOString(), previousHash);
+      
+      // Use new Chat() + save() to ensure Mongoose setters run properly for encryption
+      const chatMessage = new Chat({
+        senderId: currentUser,
+        receiverId: targetUsername,
+        encryptedMessage,
+        chatRoomId,
+        messageType: 'live_location',
+        liveLocationSessionId: sessionId,
+        liveLocationStatus: 'active',
+        metadata: {
+          sessionId,
+          sharerName: currentUser,
+          expiryAt: expiryAt.toISOString(),
+          initialLocation: initialLocation || null,
+        },
+        chatPublicKey,
+        chatPrivateKey,
+        hash,
+        previousHash,
+        timestamp,
+      });
+      await chatMessage.save();
+
+      console.log('📍 Created live location chat message:', chatMessage._id);
+    } catch (msgError) {
+      console.error('Failed to create live location chat message:', msgError);
+      // Continue - the session was created successfully, message creation is secondary
+    }
+
     res.json({
       success: true,
       session: {
@@ -181,6 +220,17 @@ router.post('/stop/:sessionId', authenticateToken, async (req, res) => {
 
     await session.stopSharing('manual');
 
+    // Update the corresponding chat message status to stopped
+    try {
+      await Chat.updateMany(
+        { liveLocationSessionId: sessionId },
+        { liveLocationStatus: 'stopped' }
+      );
+      console.log(`📍 Updated chat message status for stopped session ${sessionId}`);
+    } catch (chatError) {
+      console.warn('Failed to update chat message for stopped session:', chatError);
+    }
+
     res.json({
       success: true,
       message: 'Location sharing stopped',
@@ -211,15 +261,17 @@ router.get('/view/:sessionId', authenticateToken, async (req, res) => {
 
     let isViewer = false;
     try {
-      for (const viewer of session.viewers) {
-        const decryptedViewer = decryptField(viewer);
-        if (decryptedViewer === currentUser) {
+      // Use toObject with getters to get decrypted viewer names
+      const sessionObj = session.toObject({ getters: true });
+      for (const viewer of sessionObj.viewers) {
+        console.log('📍 Checking viewer:', viewer, 'against current user:', currentUser);
+        if (viewer === currentUser) {
           isViewer = true;
           break;
         }
       }
     } catch (e) {
-      console.warn('Failed to check viewer authorization');
+      console.warn('Failed to check viewer authorization:', e);
     }
 
     if (!isViewer) {

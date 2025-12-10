@@ -1,5 +1,6 @@
-import { Lock, Check, CheckCheck, Image as ImageIcon, Video, Mic, File, MapPin, User, BarChart3 } from "lucide-react";
+import { Lock, Check, CheckCheck, Image as ImageIcon, Video, Mic, File, MapPin, User, BarChart3, Radio } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useLocation } from "wouter";
 
 interface MessageBubbleProps {
   content: string;
@@ -9,9 +10,10 @@ interface MessageBubbleProps {
   blockNumber?: number;
   isEncrypted?: boolean;
   status?: 'sent' | 'delivered' | 'seen';
-  messageType?: 'text' | 'image' | 'video' | 'audio' | 'document' | 'location' | 'contact' | 'poll';
+  messageType?: 'text' | 'image' | 'video' | 'audio' | 'document' | 'location' | 'contact' | 'poll' | 'live_location';
   mediaUrl?: string;
   metadata?: any;
+  liveLocationStatus?: 'active' | 'expired' | 'stopped' | null;
   onContextMenu?: (e: React.MouseEvent, id: string) => void;
   isSelected?: boolean;
   onToggleSelect?: (id: string) => void;
@@ -27,10 +29,12 @@ export default function MessageBubble({
   messageType = 'text',
   mediaUrl,
   metadata,
+  liveLocationStatus,
   onContextMenu,
   isSelected,
   onToggleSelect,
 }: MessageBubbleProps) {
+  const [, setLocation] = useLocation();
   const renderMediaContent = () => {
     if (!mediaUrl && !metadata) return null;
     
@@ -129,6 +133,53 @@ export default function MessageBubble({
           );
         }
         return null;
+      case 'live_location':
+        if (metadata) {
+          const { sessionId, sharerName, expiryAt } = metadata;
+          const isActive = liveLocationStatus === 'active';
+          const expiryDate = new Date(expiryAt);
+          const isExpired = expiryDate < new Date() || liveLocationStatus === 'expired' || liveLocationStatus === 'stopped';
+          
+          return (
+            <div 
+              className={`bg-gradient-to-r ${isExpired ? 'from-gray-700/50 to-gray-600/50' : 'from-green-900/50 to-green-800/50'} px-4 py-3 rounded-lg mb-2 min-w-[220px] cursor-pointer hover:opacity-90 transition-opacity border ${isExpired ? 'border-gray-600' : 'border-green-500/50'}`}
+              onClick={() => !isExpired && setLocation(`/live/${sessionId}`)}
+              data-testid="media-live-location"
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <div className="relative">
+                  <Radio className={`h-5 w-5 ${isExpired ? 'text-gray-400' : 'text-green-400'}`} />
+                  {isActive && !isExpired && (
+                    <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+                  )}
+                </div>
+                <span className={`font-semibold text-sm ${isExpired ? 'text-gray-400' : 'text-green-300'}`}>
+                  Live Location
+                </span>
+              </div>
+              <p className="text-sm text-gray-300 mb-2">
+                {sharerName} {isExpired ? 'shared' : 'is sharing'} live location
+              </p>
+              {isExpired ? (
+                <div className="flex items-center gap-2 text-xs text-gray-500">
+                  <span>Location sharing ended</span>
+                </div>
+              ) : (
+                <button 
+                  className="w-full bg-green-600 hover:bg-green-700 text-white text-sm py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setLocation(`/live/${sessionId}`);
+                  }}
+                >
+                  <MapPin className="h-4 w-4" />
+                  Open Live View
+                </button>
+              )}
+            </div>
+          );
+        }
+        return null;
       default:
         return null;
     }
@@ -143,6 +194,7 @@ export default function MessageBubble({
       case 'location': return <MapPin className="h-3 w-3 text-green-500" />;
       case 'contact': return <User className="h-3 w-3 text-cyan-500" />;
       case 'poll': return <BarChart3 className="h-3 w-3 text-yellow-500" />;
+      case 'live_location': return <Radio className="h-3 w-3 text-green-400" />;
       default: return null;
     }
   };

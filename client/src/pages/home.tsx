@@ -43,9 +43,10 @@ interface Message {
   encryptedPayload?: string;
   blockNumber?: number;
   status?: 'sent' | 'delivered' | 'seen';
-  messageType?: 'text' | 'image' | 'video' | 'audio' | 'document' | 'location' | 'contact' | 'poll';
+  messageType?: 'text' | 'image' | 'video' | 'audio' | 'document' | 'location' | 'contact' | 'poll' | 'live_location';
   mediaUrl?: string;
   metadata?: any;
+  liveLocationStatus?: 'active' | 'expired' | 'stopped' | null;
 }
 
 interface Block {
@@ -539,6 +540,7 @@ export default function Home({ onLogout }: HomeProps) {
               messageType: msg.messageType,
               mediaUrl: msg.mediaUrl,
               metadata: msg.metadata,
+              liveLocationStatus: msg.liveLocationStatus,
             });
           } catch (error) {
             console.error('Failed to decrypt message:', error);
@@ -712,6 +714,7 @@ export default function Home({ onLogout }: HomeProps) {
             messageType: msg.messageType,
             mediaUrl: msg.mediaUrl,
             metadata: msg.metadata,
+            liveLocationStatus: msg.liveLocationStatus,
           });
         } catch (error) {
           console.error('Failed to decrypt message:', error);

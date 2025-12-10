@@ -1,4 +1,5 @@
 import LiveLocation from '../models/LiveLocation.js';
+import Chat from '../models/Chat.js';
 import { decryptField } from '../lib/encryption.js';
 
 let locationWorkerInterval = null;
@@ -52,6 +53,17 @@ async function processExpiredSessions() {
       await session.save();
 
       console.log(`📍 Location session ${session.sessionId} expired`);
+
+      // Update the corresponding chat message status to expired
+      try {
+        await Chat.updateMany(
+          { liveLocationSessionId: session.sessionId },
+          { liveLocationStatus: 'expired' }
+        );
+        console.log(`📍 Updated chat message status for session ${session.sessionId}`);
+      } catch (chatError) {
+        console.warn('Failed to update chat message for expired session:', chatError);
+      }
 
       if (io && userSockets) {
         try {

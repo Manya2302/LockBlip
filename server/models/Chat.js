@@ -48,8 +48,18 @@ const chatSchema = new mongoose.Schema({
   },
   messageType: {
     type: String,
-    enum: ['text', 'image', 'video', 'audio', 'document', 'location', 'contact', 'poll'],
+    enum: ['text', 'image', 'video', 'audio', 'document', 'location', 'contact', 'poll', 'live_location'],
     default: 'text',
+  },
+  liveLocationSessionId: {
+    type: String,
+    default: null,
+    index: true,
+  },
+  liveLocationStatus: {
+    type: String,
+    enum: ['active', 'expired', 'stopped', null],
+    default: null,
   },
   mediaUrl: {
     type: String,
